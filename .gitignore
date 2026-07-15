@@ -10,6 +10,8 @@ build/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/gradle.xml
+.idea/workspace.xml
 *.iws
 *.iml
 *.ipr
@@ -41,3 +43,22 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Evermail - Environment variables and secrets ###
+.env
+.env.local
+*.env
+
+### Evermail - Local SQLite database ###
+*.db
+*.sqlite
+*.sqlite3
+/data/
+
+### Evermail - Downloaded attachments (on-demand download) ###
+/attachments/
+/downloads/
+
+### Evermail - Logs ###
+*.log
+/logs/
