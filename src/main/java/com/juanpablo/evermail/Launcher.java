@@ -1,9 +1,9 @@
-package com.juanpablo.evermail.evermail;
+package com.juanpablo.evermail;
 
 import javafx.application.Application;
 
 public class Launcher {
     public static void main(String[] args) {
-        Application.launch(HelloApplication.class, args);
+        Application.launch(App.class, args);
     }
 }

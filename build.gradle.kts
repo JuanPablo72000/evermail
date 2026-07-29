@@ -27,8 +27,8 @@ tasks.withType<JavaCompile> {
 }
 
 application {
-    mainModule.set("com.juanpablo.evermail.evermail")
-    mainClass.set("com.juanpablo.evermail.evermail.HelloApplication")
+    mainModule.set("com.juanpablo.evermail")
+    mainClass.set("com.juanpablo.evermail.App")
 }
 
 javafx {
