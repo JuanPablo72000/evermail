@@ -55,7 +55,11 @@ classDiagram
     LabelRepository --> LabelDAO : uses
     LabelRepository --> MailLabelDAO : uses
 
-    %% Dependencies toward exception (throws)
+    %% Dependencies towards util (SecretKey resolution)
+    MailRepository --> SecurityUtil : uses
+    DraftRepository --> SecurityUtil : uses
+
+    %% Dependencies towards exception (throws)
     AccountRepository ..> DatabaseException : throws
     MailRepository ..> DatabaseException : throws
     DraftRepository ..> DatabaseException : throws
@@ -63,21 +67,25 @@ classDiagram
 ```
 
 **Key syntax used here:**
-- `<<Repository>>`: Stereotype marking domain-aggregate classes, which combine one or more DAOs to expose a coherent view of a main entity.
-- `-->`: **Association/Usage.** The Repository holds an injected reference toward each DAO it needs.
-- `..>`: **Dependency.** The Repository propagates the referenced exception (originating in the DAO) up to the `service` layer.
+- `<<Repository>>`: Stereotype marking domain-aggregate classes that combine one or more DAOs to expose a coherent view of a primary entity.
+- `-->`: **Association/Usage.** The Repository holds an injected reference to each DAO (or util class) it needs.
+- `..>`: **Dependency.** The Repository propagates the referenced exception (originated in the DAO) up to the `service` layer.
 - `-`, `+`: Access modifiers (Private, Public).
 
 **Design notes:**
 
-1. Each Repository exposes only domain vocabulary (`getInbox`, `markAsRead`, `getUnreadCount`) instead of SQL vocabulary (`findByX`, `insertBatch`) — the `service` layer never knows that underneath there are several tables or SQL statements involved.
+1. Each Repository exposes only domain vocabulary (`getInbox`, `markAsRead`, `getUnreadCount`) instead of SQL vocabulary (`findByX`, `insertBatch`) — `service` never knows that underneath there are several tables, SQL statements, or encryption-key resolution involved.
 
-2. `MailRepository.save(Mail mail)` is the clearest example of orchestration: when saving a complete mail, it internally invokes `MailDAO.insert()`, `MailAddressDAO.insertBatch()` (recipients), and `AttachmentDAO.insert()` (if applicable) in a single atomic operation, resolving in one method what at the DAO layer are three separate calls.
+2. **`MailRepository` and `DraftRepository` now depend directly on `SecurityUtil`** (from the `util` package), since they are the ones responsible for resolving the `SecretKey` via `SecurityUtil.retrieveAesKey(idAccount)` **once per business operation** and distributing that same key to the DAOs they orchestrate internally. Example: `MailRepository.save(Mail mail)` resolves the key once and passes it to both `MailDAO.insert()` and `AttachmentDAO.insert()` — a single keyring access instead of two.
 
-3. `EmailAddressDAO` has no Repository of its own (as already defined): it is injected and consumed directly by `AccountRepository`, `MailRepository`, and `DraftRepository`, each resolving email addresses in the context of its own aggregate.
+3. `AccountRepository` and `LabelRepository` do not need `SecurityUtil` because none of their combined DAOs (`AccountDAO`, `AppProfileDAO`, `EmailAddressDAO`, `LabelDAO`, `MailLabelDAO`) handle encrypted fields.
 
-4. `LabelRepository.getUnreadCount()` is a convenience method that aggregates over `MailLabelDAO` (counting rows with `isRead = false` for a given label) — it lives here and not in `MailLabelDAO` because "counting unread items" is a business need (showing a badge in the UI), not a pure CRUD operation.
+4. `MailRepository.save(Mail mail)` remains the clearest example of orchestration: when saving a complete mail, it internally invokes `MailDAO.insert()`, `MailAddressDAO.insertBatch()` (recipients), and `AttachmentDAO.insert()` (if applicable) as a single atomic operation — resolving in one method what at the DAO layer are three separate calls, now sharing one already-resolved `SecretKey`.
 
-5. All Repositories propagate `DatabaseException` without transforming it — the `service` that consumes them (`MailSyncService`, `MailSendService`, `DraftService`, `AccountRepository` via `AuthService`, etc.) decides how to handle it, preserving the same `ErrorCode` originating from the DAO.
+5. `EmailAddressDAO` has no Repository of its own (as already defined): it is injected and consumed directly from `AccountRepository`, `MailRepository`, and `DraftRepository`, each resolving email addresses in the context of its own aggregate.
 
-6. No Repository is aware of `SqliteConnectionProvider` directly — that dependency lives only in the DAOs (see `Diagrama_UML_DAO.md`), reinforcing that the Repository only orchestrates DAOs, it does not manage connections.
+6. `LabelRepository.getUnreadCount()` is a convenience method that aggregates over `MailLabelDAO` (counting rows with `isRead = false` for a given label) — it lives here and not in `MailLabelDAO` because "counting unread" is a business need (showing a badge in the UI), not a pure CRUD operation.
+
+7. All Repositories propagate `DatabaseException` without transforming it — the `service` that consumes them (`MailSyncService`, `MailSendService`, `DraftService`, `AccountRepository` via `AuthService`, etc.) decides how to handle it, keeping the same `ErrorCode` originated in the DAO.
+
+8. No Repository is aware of `SqliteConnectionProvider` directly — that dependency lives only in the DAOs (see `uml-dao.md`), reinforcing that the Repository only orchestrates DAOs and encryption-key resolution, it does not manage connections.
