@@ -12,6 +12,9 @@ build/
 .idea/libraries/
 .idea/gradle.xml
 .idea/workspace.xml
+.idea/dataSources.xml
+.idea/dataSources/
+.idea/sqldialects.xml
 *.iws
 *.iml
 *.ipr
