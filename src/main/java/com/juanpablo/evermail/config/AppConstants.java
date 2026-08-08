@@ -13,7 +13,7 @@ public final class AppConstants {
     public static final int LOGIN_TIMEOUT_SECONDS = 2;
     public static final int INBOX_LOAD_TIMEOUT_SECONDS = 3;
     public static final int MAIL_OPEN_TIMEOUT_SECONDS = 5;
-    public static final String DB_PATH = "evermail.db";
+    public static final String DB_PATH = System.getenv("APPDATA") + "\\Evermail\\evermail.db";
     public static final int DB_POOL_SIZE = 5;
     public static final int AES_KEY_SIZE_BITS = 256;
 

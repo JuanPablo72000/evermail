@@ -27,5 +27,8 @@ public enum ErrorCode {
 
     // Attachment
     ATTACHMENT_NOT_FOUND,
-    ATTACHMENT_TOO_LARGE
+    ATTACHMENT_TOO_LARGE,
+
+    // Security
+    CRYPTO_OPERATION_FAILED
 }

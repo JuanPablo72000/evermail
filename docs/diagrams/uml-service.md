@@ -37,30 +37,31 @@ classDiagram
         +downloadAttachment(Attachment attachment, Account account) File
     }
 
-    %% Collaboration between services (constructor injection)
+%% Collaboration between services (constructor injection)
     MailSessionProvider --> AuthService : uses
     MailSyncService --> MailSessionProvider : uses
     MailSendService --> MailSessionProvider : uses
     MailSendService --> DraftService : uses
     AttachmentService --> MailSessionProvider : uses
 
-    %% Dependencies toward util
+%% Dependencies toward util
     MailSessionProvider --> SecurityUtil : uses
     MailSyncService --> MimeUtil : uses
     MailSendService --> EmailValidator : uses
     AttachmentService --> FileUtil : uses
+    AttachmentService --> SecurityUtil : uses
 
-    %% Dependencies toward config
+%% Dependencies toward config
     AuthService --> EnvConfig : uses
 
-    %% Dependencies toward repository
+%% Dependencies toward repository
     AuthService --> AccountRepository : uses
     MailSyncService --> MailRepository : uses
     MailSendService --> MailRepository : uses
     DraftService --> DraftRepository : uses
     AttachmentService --> MailRepository : uses
 
-    %% Dependencies toward exception (throws)
+%% Dependencies toward exception (throws)
     AuthService ..> OAuthAuthenticationException : throws
     MailSessionProvider ..> MailFetchException : throws
     MailSessionProvider ..> MailSendException : throws
@@ -68,10 +69,13 @@ classDiagram
     MailSendService ..> MailSendException : throws
     MailSendService ..> InvalidEmailAddressException : throws
     AttachmentService ..> AttachmentException : throws
+    AttachmentService ..> CryptoException : throws
     AuthService ..> DatabaseException : throws
+    AuthService ..> CryptoException : throws
     MailSyncService ..> DatabaseException : throws
     MailSendService ..> DatabaseException : throws
     DraftService ..> DatabaseException : throws
+    DraftService ..> CryptoException : throws
     AttachmentService ..> DatabaseException : throws
 ```
 
@@ -93,6 +97,10 @@ classDiagram
 
 5. `MailSyncService.markAsRead()` operates on the pair `(Mail, Label)`, reflecting the design already defined in the E-R model, where `isRead` lives in `Mail_Label` — meaning a mail can be read under one label and unread under another (Gmail-style behavior).
 
-6. Each Service depends on exactly the Repository that corresponds to its domain aggregate: `AuthService` and `MailSyncService`/`MailSendService` use `AccountRepository`/`MailRepository` respectively to persist tokens and mail; `DraftService` uses `DraftRepository`; `AttachmentService` uses `MailRepository` only to resolve `Attachment` metadata (path, size), not to download the file itself (that part still lives in `FileUtil`, via `util`). No Service knows a DAO directly, nor `SqliteConnectionProvider` — that layer stays completely hidden behind the corresponding Repository.
+6. Each Service depends on exactly the Repository that corresponds to its domain aggregate: `AuthService` and `MailSyncService`/`MailSendService` use `AccountRepository`/`MailRepository` respectively to persist tokens and mail; `DraftService` uses `DraftRepository`; `AttachmentService` uses `MailRepository` to resolve `Attachment` metadata and to persist the downloaded file's path (`MailRepository.updateAttachmentPath()`, see `uml-repositories.md` note 9). No Service knows a DAO directly, nor `SqliteConnectionProvider` — that layer stays completely hidden behind the corresponding Repository.
 
-7. Since every Repository propagates `DatabaseException` without transforming it (see `Diagrama_UML_Repository.md`, note 5), every Service that depends on one also declares `DatabaseException` among its possible thrown exceptions, in addition to its own domain-specific ones (`OAuthAuthenticationException`, `MailSendException`, etc.).
+7. Since every Repository propagates `DatabaseException` without transforming it (see `uml-repositories.md`, note 7), every Service that depends on one also declares `DatabaseException` among its possible thrown exceptions, in addition to its own domain-specific ones (`OAuthAuthenticationException`, `MailSendException`, etc.).
+
+8. **`AttachmentService` now depends directly on `SecurityUtil`**, in addition to `FileUtil`. Before calling `FileUtil.downloadAttachment()`, `AttachmentService` must resolve the account's `SecretKey` via `SecurityUtil.retrieveAesKey(idAccount)` — `FileUtil` cannot resolve it on its own (it's fully static, with no keyring access) and `MailRepository` isn't asked to do it here, since resolving the key for a *file download* is a `service`-level concern about *when* to decrypt, not a `repository`-level concern about *how* to store `Mail`/`Draft` rows.
+
+9. **`AuthService` and `DraftService` now also declare `CryptoException`**, alongside `DatabaseException`, since both depend on Repositories (`AccountRepository`, `DraftRepository`) that internally call `SecurityUtil` and propagate its exceptions unchanged (see `uml-repositories.md`, note 8).
