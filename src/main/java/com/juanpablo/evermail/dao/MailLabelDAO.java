@@ -87,6 +87,28 @@ public class MailLabelDAO {
         }
     }
 
+    /**
+     * Counts mail_label rows for the given label where is_read = 0. Added to
+     * support LabelRepository.getUnreadCount() (see uml-repositories.md, note
+     * 6) — no prior method here allowed filtering by id_label, only by id_mail.
+     */
+    public int countUnreadByLabel(int idLabel) throws DatabaseException {
+        String sql = "SELECT COUNT(*) FROM mail_label WHERE id_label = ? AND is_read = 0";
+
+        synchronized (connectionProvider) {
+            Connection connection = connectionProvider.getConnection();
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setInt(1, idLabel);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    resultSet.next();
+                    return resultSet.getInt(1);
+                }
+            } catch (SQLException e) {
+                throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, e);
+            }
+        }
+    }
+
     private MailLabel mapRow(ResultSet resultSet) throws SQLException {
         MailLabel mailLabel = new MailLabel();
         mailLabel.setIdMail(resultSet.getInt("id_mail"));

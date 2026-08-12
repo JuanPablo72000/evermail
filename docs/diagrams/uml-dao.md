@@ -4,7 +4,6 @@ classDiagram
         <<Repository>>
         +SqliteConnectionProvider()
         +getConnection() Connection
-        +close() void
     }
 
     class AccountDAO {
@@ -44,7 +43,6 @@ classDiagram
         <<DAO>>
         +findByMail(int idMail) List~Attachment~
         +insert(Attachment attachment) int
-        +updateFilePath(int idAttachment, String filePath) void
         +delete(int idAttachment) void
     }
 
@@ -117,27 +115,23 @@ classDiagram
 
 **Key syntax used here:**
 - `<<DAO>>`: Stereotype marking classes with direct access to a physical SQLite table, with no domain logic.
-- `<<Repository>>`: Stereotype reused here for `SqliteConnectionProvider`, since it manages a live resource (the single shared connection), just like `MailSessionProvider` in `service`.
-- `-->`: **Association/Usage.** The origin class holds an injected reference toward the target class.
+- `<<Repository>>`: Stereotype reused here for `SqliteConnectionProvider`, since it manages a live resource (connection pool), just like `MailSessionProvider` in `service`.
+- `-->`: **Association/Usage.** The origin class holds an injected reference to the target class.
 - `..>`: **Dependency.** The origin class throws the referenced exception.
 - `-`, `+`: Access modifiers (Private, Public).
 
 **Design notes:**
 
-1. `SqliteConnectionProvider` centralizes opening and reusing a **single shared SQLite connection**, initializing `DB_PATH` from `AppConstants` once, creating the storage directory if needed, and enabling `PRAGMA foreign_keys = ON` (which does not persist across connections, so it must be set every time a connection is opened). All DAOs receive it injected via constructor, replicating the same pattern already used with `MailSessionProvider` in `service`.
+1. `SqliteConnectionProvider` centralizes opening and reusing SQLite connections (pool), initializing `DB_PATH` from `AppConstants` a single time. All DAOs receive it injected via constructor, replicating the same pattern already used with `MailSessionProvider` in `service` — this prevents each DAO from opening its own connection and reduces resource consumption.
 
-2. Each DAO corresponds exactly to one physical table from the E-R model, including junction tables (`MailLabelDAO`, `MailAddressDAO`, `DraftAddressDAO`), which expose batch methods (`insertBatch`) to minimize round-trips to the database when several related rows are saved at once (e.g. multiple recipients of the same mail). `insertBatch` wraps its `PreparedStatement.addBatch()`/`executeBatch()` calls in a manual transaction (`setAutoCommit(false)` + `commit()`/`rollback()`), so a batch insert is all-or-nothing.
+2. Each DAO corresponds exactly to one physical table from the E-R model, including junction tables (`MailLabelDAO`, `MailAddressDAO`, `DraftAddressDAO`), which expose batch methods (`insertBatch`) to minimize round-trips to the database when several related rows are saved at once (e.g. multiple recipients of the same mail).
 
 3. `MailLabelDAO.updateIsRead()` exists as its own method (instead of a generic `update()`) because, according to the E-R model, `isRead` is the only mutable field of that junction table — this optimizes the most common operation (marking read/unread) into a single targeted SQL statement, without needing to rebuild the entire row.
 
-4. **No DAO receives a `SecretKey` parameter, anywhere in this package.** This corrects the original design, which had `MailDAO`, `AttachmentDAO`, and `DraftDAO` receiving a `SecretKey` while simultaneously claiming they didn't know about `SecurityUtil` — a contradiction, since a key is useless without something that knows how to use it. The final design goes further: **every encrypted field arrives at the DAO already encrypted, and leaves already encrypted** — `bodyPlainText`/`bodyHTML` (`Mail`, `Draft`) and `accessToken`/`refreshToken` (`Account`) are opaque `String`s as far as any DAO is concerned. Resolving the key and calling `SecurityUtil.encrypt()`/`decrypt()` happens exclusively in the `repository` layer (see `uml-repositories.md`, note 2), once per business operation.
+4. **`MailDAO`, `AttachmentDAO`, and `DraftDAO` never receive nor touch a `SecretKey`.** They are pure CRUD: every field that is encrypted at rest (`bodyPlainText`, `bodyHTML` on `Mail`/`Draft`; the file content on `Attachment`) arrives at the DAO **already encrypted as a plain `String`** (or, for `Attachment`, is not even DAO-managed — see note 4b), and is written/read as-is, with no cryptographic parameter in the method signature. Resolving the `SecretKey` (via `SecurityUtil.retrieveAesKey(idAccount)`) and calling `encrypt`/`decrypt` around each DAO call is the exclusive responsibility of the `repository` layer, done once per business operation and reused across every DAO it orchestrates — this avoids redundant OS keyring accesses in batch flows such as inbox synchronization, and keeps every DAO trivially unit-testable without a `SecurityUtil` mock.
 
-5. **`AttachmentDAO` never touches encryption at all** — not even indirectly. Attachment content isn't a SQLite column; only its metadata (`fileName`, `mimeType`, `sizeBytes`, `filePath`) is. The actual encrypted bytes live in a file on disk, encrypted by `FileUtil`/`SecurityUtil` at the `util`/`service` layer (see `uml-util.md`, note 8), entirely outside this DAO's awareness.
+4b. `AttachmentDAO` only persists metadata (`fileName`, `mimeType`, `sizeBytes`, `filePath`) — the encrypted binary content lives on disk (`%APPDATA%\Evermail\attachments\{accountId}\`), written by `FileUtil.downloadAttachment()` in the `service` layer, not through this DAO at all. That's a second, independent reason `AttachmentDAO.insert()` carries no `SecretKey`.
 
-6. **`AttachmentDAO.updateFilePath()` is new**, closing a gap in the on-demand download flow: `insert()` runs during inbox sync, when the file hasn't been downloaded yet (`filePath` is `null`); `updateFilePath()` runs afterward, once `FileUtil.downloadAttachment()` finishes writing the encrypted file, to persist where it landed.
+5. All DAOs still throw only `DatabaseException` (with its corresponding `ErrorCode`, e.g. `DB_QUERY_FAILED`) — since no DAO calls `SecurityUtil`, none of them need to translate a cryptographic failure into a `DatabaseException` either; that responsibility now sits entirely with whichever `repository` method performed the `encrypt`/`decrypt` call.
 
-7. All DAOs still throw only `DatabaseException` (with its corresponding `ErrorCode`, e.g. `DB_QUERY_FAILED`). Since DAOs never touch `SecurityUtil` (note 4), they no longer need to cover encryption/decryption failures — those are reported as `CryptoException`, one layer up, by whichever `Repository` calls `SecurityUtil` directly.
-
-8. **Concurrency:** every DAO method wraps its body in `synchronized (connectionProvider)`. Since `SqliteConnectionProvider` holds a single shared `Connection` (note 1), and multiple `facade` `Task`s can run on different threads simultaneously, this guards against two threads driving the same JDBC `Connection` object at once — a real risk with SQLite's driver, independent of SQLite's own single-writer file lock. `connectionProvider` itself is used as the lock object, since it's the one instance shared by all 10 DAOs. See `uml-config.md`, note 6, for why this was chosen over a real connection pool or a dedicated single-thread executor.
-
-9. No DAO is aware of any other DAO nor of the `repository` package that consumes it — that orchestration lives exclusively in the `Repository` layer, shown in a separate diagram (`uml-repositories.md`) to keep both diagrams readable.
+6. No DAO is aware of any other DAO nor of the `repository` package that consumes it — that orchestration lives exclusively in the `Repository` layer, shown in a separate diagram (`uml-repositories.md`) to keep both diagrams readable.
