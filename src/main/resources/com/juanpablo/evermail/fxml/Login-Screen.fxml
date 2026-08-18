@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+<HBox fx:id="background" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="540.0" prefWidth="960.0" stylesheets="@../css/Login-Styles.css" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
+   <children>
+      <VBox prefHeight="540.0" prefWidth="480.0">
+         <children>
+            <HBox alignment="BOTTOM_CENTER" prefHeight="100.0" prefWidth="200.0" VBox.vgrow="ALWAYS">
+               <children>
+                  <Label fx:id="evermail_text" text="Evermail" textAlignment="CENTER">
+                     <font>
+                        <Font name="Segoe UI" size="70.0" />
+                     </font>
+                  </Label>
+               </children>
+            </HBox>
+            <HBox alignment="TOP_CENTER" prefHeight="100.0" prefWidth="200.0" VBox.vgrow="ALWAYS">
+               <children>
+                  <Label fx:id="vision_text" prefHeight="72.0" prefWidth="331.0" text="Secure. Elegant. Efficient Access your mailbox." textAlignment="CENTER" wrapText="true">
+                     <font>
+                        <Font size="25.0" />
+                     </font>
+                  </Label>
+               </children>
+            </HBox>
+         </children>
+      </VBox>
+      <HBox alignment="CENTER" fillHeight="false" prefHeight="540.0" prefWidth="480.0">
+         <children>
+            <VBox fx:id="login_panel" alignment="CENTER" prefHeight="428.0" prefWidth="326.0">
+               <children>
+                  <ImageView fx:id="logo_imageview" fitHeight="158.0" fitWidth="290.0" pickOnBounds="true" preserveRatio="true">
+                     <image>
+                        <Image url="@../images/Logo_Evermail.png" />
+                     </image></ImageView>
+                  <Label fx:id="welcome_text" text="Welcome Back" textAlignment="CENTER">
+                     <font>
+                        <Font name="Segoe UI Semibold" size="30.0" />
+                     </font>
+                     <VBox.margin>
+                        <Insets top="17.0" />
+                     </VBox.margin>
+                  </Label>
+                  <Label fx:id="sign_in_text" text="Sign in to your email account">
+                     <font>
+                        <Font name="Segoe UI Semibold" size="16.0" />
+                     </font>
+                  </Label>
+                  <Button fx:id="google_button" graphicTextGap="20.0" mnemonicParsing="false" prefHeight="38.0" prefWidth="261.0" text="Sign in with Google" textAlignment="CENTER">
+                     <VBox.margin>
+                        <Insets top="24.0" />
+                     </VBox.margin>
+                     <font>
+                        <Font name="Segoe UI Semibold" size="16.0" />
+                     </font>
+                     <graphic>
+                        <ImageView fitHeight="28.0" fitWidth="28.0" pickOnBounds="true" preserveRatio="true">
+                           <image>
+                              <Image url="@../images/Google_Logo.png" />
+                           </image></ImageView>
+                     </graphic></Button>
+                  <Button fx:id="microsoft_button" graphicTextGap="10.0" mnemonicParsing="false" prefHeight="38.0" prefWidth="261.0" text="Sign in with Microsoft" textAlignment="CENTER">
+                     <VBox.margin>
+                        <Insets top="33.0" />
+                     </VBox.margin>
+                     <font>
+                        <Font name="Segoe UI Semibold" size="16.0" />
+                     </font>
+                     <graphic>
+                        <ImageView fitHeight="28.0" fitWidth="28.0" pickOnBounds="true" preserveRatio="true">
+                           <image>
+                              <Image url="@../images/Microsoft_Logo.png" />
+                           </image></ImageView>
+                     </graphic>
+                  </Button>
+               </children>
+            </VBox>
+         </children>
+      </HBox>
+   </children>
+</HBox>
