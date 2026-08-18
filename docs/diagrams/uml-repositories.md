@@ -7,6 +7,8 @@ classDiagram
         +create(Account account, AppProfile profile, EmailAddress emailAddress) Account
         +save(Account account) void
         +delete(int idAccount) void
+        +getEmailOfAccount(Account account) String
+        +resolveOrCreateAddress(String email, boolean isInternal) EmailAddress
     }
 
     class MailRepository {
@@ -16,6 +18,7 @@ classDiagram
         +save(Mail mail) void
         +markAsRead(int idMail, int idLabel, boolean isRead) void
         +delete(int idMail) void
+        +updateAttachmentPath(Attachment attachment) void
     }
 
     class DraftRepository {
@@ -96,3 +99,5 @@ classDiagram
 7. All Repositories propagate `DatabaseException` without transforming it — the `service` that consumes them (`MailSyncService`, `MailSendService`, `DraftService`, `AccountRepository` via `AuthService`, etc.) decides how to handle it, keeping the same `ErrorCode` originated in the DAO. **Correction:** any failure raised by `SecurityUtil` (key generation, keyring access, AES encrypt/decrypt) is **not** translated into a `DatabaseException` — `SecurityUtil` throws its own checked `CryptoException` (`ErrorCode.CRYPTO_OPERATION_FAILED`), kept deliberately separate so a `service` can tell apart "the database failed" from "the local encryption/keyring failed" without inspecting `ErrorCode`. `AccountRepository`, `MailRepository`, and `DraftRepository` therefore each propagate **both** `DatabaseException` and `CryptoException`, undisturbed, up to `service`.
 
 8. No Repository is aware of `SqliteConnectionProvider` directly — that dependency lives only in the DAOs (see `uml-dao.md`), reinforcing that the Repository only orchestrates DAOs and encryption-key resolution, it does not manage connections.
+
+9. `AccountRepository.getEmailOfAccount()` resolves the account's own email (normalized in `email_address`, linked via `id_address`) — needed by `MailSessionProvider` because XOAUTH2 authenticates with the email, not just the access token. `resolveOrCreateAddress()` centralizes the "findByEmail or insert" pattern (previously inline in `create()`) and is reused by `MailSyncService`/`MailSendService`/`DraftService` to build junction rows from raw email strings. `MailRepository.updateAttachmentPath()` delegates to the pre-existing `AttachmentDAO.updateFilePath()` and persists the on-disk path of a downloaded attachment so later opens skip the network.

@@ -21,4 +21,5 @@ public class Account {
     private String accessToken;
     private String refreshToken;
     private LocalDateTime tokenExpiresAt;
+    private OAuthProvider provider;
 }

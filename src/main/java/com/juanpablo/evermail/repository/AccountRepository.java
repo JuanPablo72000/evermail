@@ -5,6 +5,7 @@ import com.juanpablo.evermail.dao.AppProfileDAO;
 import com.juanpablo.evermail.dao.EmailAddressDAO;
 import com.juanpablo.evermail.exception.CryptoException;
 import com.juanpablo.evermail.exception.DatabaseException;
+import com.juanpablo.evermail.exception.ErrorCode;
 import com.juanpablo.evermail.model.Account;
 import com.juanpablo.evermail.model.AppProfile;
 import com.juanpablo.evermail.model.EmailAddress;
@@ -168,10 +169,47 @@ public class AccountRepository {
         accountDAO.delete(idAccount);
     }
 
+    /**
+     * Resolves the account's own email address (stored in email_address and
+     * linked via id_address). Needed by MailSessionProvider, because XOAUTH2
+     * requires the user's email — not just the access token — to authenticate
+     * IMAP/SMTP sessions.
+     *
+     * @throws DatabaseException if the linked email_address row does not exist.
+     */
+    public String getEmailOfAccount(Account account) throws DatabaseException {
+        EmailAddress address = emailAddressDAO.findById(account.getIdAddress());
+        if (address == null) {
+            throw new DatabaseException(ErrorCode.DB_QUERY_FAILED,
+                    "No email address found for account id " + account.getIdAccount());
+        }
+        return address.getEmail();
+    }
+
     private Account decryptTokens(Account account) throws CryptoException {
         SecretKey key = securityUtil.retrieveAesKey(String.valueOf(account.getIdAccount()));
         account.setAccessToken(securityUtil.decrypt(account.getAccessToken(), key));
         account.setRefreshToken(securityUtil.decrypt(account.getRefreshToken(), key));
         return account;
+    }
+
+    /**
+     * Resolves an email_address row by its email, creating it if it does not
+     * exist yet. Recipient addresses are external by default; if the row already
+     * exists (e.g. it is the account's own internal address), the stored flag is
+     * kept as-is. Needed by DraftService/MailSendService to build
+     * Draft_Address/Mail_Address rows from the raw email strings typed in the
+     * compose screen — services never touch DAOs directly.
+     */
+    public EmailAddress resolveOrCreateAddress(String email, boolean isInternal) throws DatabaseException {
+        EmailAddress existing = emailAddressDAO.findByEmail(email);
+        if (existing != null) {
+            return existing;
+        }
+        EmailAddress address = new EmailAddress();
+        address.setEmail(email);
+        address.setInternal(isInternal);
+        address.setIdAddress(emailAddressDAO.insert(address));
+        return address;
     }
 }

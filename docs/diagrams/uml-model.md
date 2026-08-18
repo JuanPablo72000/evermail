@@ -1,6 +1,6 @@
 ```mermaid
-erDiagram
-    Account {
+classDiagram
+    class Account {
         int id_account PK
         int id_profile FK
         int id_address FK
@@ -9,9 +9,10 @@ erDiagram
         string accessToken
         string refreshToken
         dateTime tokenExpiresAt
+        OAuthProvider provider
     }
 
-    AppProfile {
+    class AppProfile {
         int id_profile PK
         string theme
         int syncIntervalMinutes
@@ -19,13 +20,13 @@ erDiagram
         boolean notificationsEnabled
     }
 
-    EmailAddress {
+    class EmailAddress {
         int id_address PK
         string email
         boolean isInternal
     }
 
-    Mail {
+    class Mail {
 	    int id_mail PK
 	    int id_account FK
 	    int id_sender_address FK
@@ -37,7 +38,7 @@ erDiagram
 	    date dateReceived
 	}
 
-    Draft {
+    class Draft {
         int id_draft PK
         int id_account FK
         string subject
@@ -45,7 +46,7 @@ erDiagram
         date lastEdited
     }
 
-    Attachment {
+    class Attachment {
         int id_attachment PK
         int id_mail FK
         string fileName
@@ -54,45 +55,59 @@ erDiagram
         string filePath
     }
 
-    Label {
+    class Label {
         int id_label PK
         int id_account FK
         string name
     }
 
-    Mail_Label {
+    class Mail_Label {
         int id_mail PK, FK
         int id_label PK, FK
         boolean isRead
     }
 
-    Mail_Address {
+    class Mail_Address {
         int id_mail PK, FK
         int id_address PK, FK
         string recipientType 
     }
 
-    Draft_Address {
+    class Draft_Address {
         int id_draft PK, FK
         int id_address PK, FK
         string recipientType
     }
 
+    class OAuthProvider {
+        <<Enumeration>>
+        GOOGLE
+        MICROSOFT
+        +getAuthorizationEndpoint() String
+        +getTokenEndpoint() String
+        +getScopes() List~String~
+        +requiresClientSecret() boolean
+        +getImapHost() String
+        +getImapPort() int
+        +getSmtpHost() String
+        +getSmtpPort() int
+    }
+
     %% Relations
-    AppProfile ||--o{ Account : "Manages"
-    EmailAddress ||--|| Account : "Associated with"
-    Account ||--o{ Label : "Has"
-    Mail ||--o{ Mail_Label : "Has"
-    Label ||--o{ Mail_Label : "Groups"
-    Mail ||--o{ Attachment : "Contains"
-    Mail ||--|{ Mail_Address : "Delivered to"
-    EmailAddress ||--o{ Mail_Address : "Receives"
-    Account ||--o{ Mail : "Contains" 
-    EmailAddress ||--o{ Mail : "Sends" 
-    Mail ||--o| Mail : "Replies to"
-    Account ||--o{ Draft : "Writes"
-    Draft ||--o{ Draft_Address : "Addressed to"
-    EmailAddress ||--o{ Draft_Address : "Receives"
+    AppProfile "1" --> "*" Account : Manages
+    EmailAddress "1" --> "0..1" Account : Identifies
+    Account "1" --> "*" Label : Has
+    Account "1" --> "*" Mail : Contains
+    Account "1" --> "*" Draft : Writes
+    EmailAddress "1" --> "*" Mail : Sends
+    Mail "1" --> "*" MailLabel : Has
+    Label "1" --> "*" MailLabel : Groups
+    Mail "1" *-- "*" Attachment : Contains
+    Mail "1" --> "1..*" MailAddress : Delivered to
+    EmailAddress "1" --> "*" MailAddress : Receives
+    Mail "*" --> "0..1" Mail : Replies to
+    Draft "1" --> "*" DraftAddress : Addressed to
+    EmailAddress "1" --> "*" DraftAddress : Receives
 ```
 
 **Key syntax used here:**

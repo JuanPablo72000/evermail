@@ -46,6 +46,8 @@ dependencies {
     // dotenv-java - .env loading for OAuth Client Secrets
     implementation("io.github.cdimascio:dotenv-java:3.0.2")
 
+    implementation("com.google.code.gson:gson:2.11.0")
+
     // java-keyring - OS credential store (Windows Credential Manager / macOS Keychain / Linux Secret Service)
     implementation("com.github.javakeyring:java-keyring:1.0.4")
 

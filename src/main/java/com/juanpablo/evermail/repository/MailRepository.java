@@ -149,4 +149,8 @@ public class MailRepository {
         }
         return mail;
     }
+
+    public void updateAttachmentPath(Attachment attachment) throws DatabaseException {
+        attachmentDAO.updateFilePath(attachment.getIdAttachment(), attachment.getFilePath());
+    }
 }

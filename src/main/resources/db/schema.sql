@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS account (
     id_account INTEGER PRIMARY KEY AUTOINCREMENT,
     id_profile INTEGER NOT NULL,
     id_address INTEGER NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
     signature TEXT,
     account_name TEXT NOT NULL,
     access_token TEXT NOT NULL,
@@ -97,3 +98,4 @@ CREATE INDEX IF NOT EXISTS idx_mail_id_account ON mail (id_account);
 CREATE INDEX IF NOT EXISTS idx_draft_id_account ON draft (id_account);
 CREATE INDEX IF NOT EXISTS idx_attachment_id_mail ON attachment (id_mail);
 CREATE INDEX IF NOT EXISTS idx_label_id_account ON label (id_account);
+

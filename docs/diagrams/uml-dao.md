@@ -29,6 +29,7 @@ classDiagram
         +findByEmail(String email) EmailAddress
         +insert(EmailAddress address) int
         +delete(int idAddress) void
+        +findById(int idAddress) EmailAddress
     }
 
     class MailDAO {
@@ -135,3 +136,5 @@ classDiagram
 5. All DAOs still throw only `DatabaseException` (with its corresponding `ErrorCode`, e.g. `DB_QUERY_FAILED`) — since no DAO calls `SecurityUtil`, none of them need to translate a cryptographic failure into a `DatabaseException` either; that responsibility now sits entirely with whichever `repository` method performed the `encrypt`/`decrypt` call.
 
 6. No DAO is aware of any other DAO nor of the `repository` package that consumes it — that orchestration lives exclusively in the `Repository` layer, shown in a separate diagram (`uml-repositories.md`) to keep both diagrams readable.
+
+7. `EmailAddressDAO.findById()` was added so `AccountRepository.getEmailOfAccount()` can resolve the account's own address by `id_address` (it follows the same `synchronized (connectionProvider)` + `mapRow` pattern as `findByEmail`).

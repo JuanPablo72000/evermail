@@ -1,0 +1,59 @@
+#background {
+    -fx-background-image: url("../images/background.png");
+    -fx-background-size: cover;
+    -fx-background-position: center center;
+}
+
+#evermail_text {
+    -fx-text-fill: #FBBF24;
+}
+
+#vision_text {
+    -fx-text-fill: #EAE9FC;
+}
+
+#login_panel {
+    /* 1. Fondo semi-transparente */
+    -fx-background-color: rgba(255, 255, 255, 0.30);
+
+    /* 2. Bordes redondeados */
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+
+    /* 3. Borde blanco fino para simular el corte del cristal */
+    -fx-border-color: rgba(255, 255, 255, 0.4);
+    -fx-border-width: 1.5;
+
+    /* 4. Sombra exterior sutil */
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.3), 15, 0, 0, 5);
+}
+
+#welcome_text {
+    -fx-text-fill: #EAE9FC;
+}
+
+#sign_in_text {
+    -fx-text-fill: #EAE9FC;
+}
+
+#google_button {
+    -fx-background-color: #EAE9FC;
+    -fx-background-radius: 12; /* Corregido para redondear el fondo */
+}
+
+#microsoft_button {
+    -fx-background-color: #EAE9FC;
+    -fx-background-radius: 12; /* Corregido para redondear el fondo */
+}
+
+/* Efecto hover para el botón de Google */
+#google_button:hover {
+    -fx-background-color: #D3D1F5; /* Un tono ligeramente más oscuro que EAE9FC */
+    -fx-cursor: hand; /* Cambia el cursor a una manita */
+}
+
+/* Efecto hover para el botón de Microsoft */
+#microsoft_button:hover {
+    -fx-background-color: #D3D1F5;
+    -fx-cursor: hand;
+}
