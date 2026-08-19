@@ -18,6 +18,7 @@ public class Mail {
     private Integer idSenderAddress;
     private Integer idReplyToMail;
     private String serverMessageId;
+    private String senderDisplayName;
     private String subject;
     private String bodyPlainText;
     private String bodyHTML;

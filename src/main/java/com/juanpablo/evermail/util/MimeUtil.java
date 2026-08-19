@@ -77,4 +77,19 @@ public final class MimeUtil {
             );
         }
     }
+
+    public static String extractSenderName(Message mimeMessage) throws MailFetchException {
+        try {
+            Address[] fromAddresses = mimeMessage.getFrom();
+            if (fromAddresses == null || fromAddresses.length == 0) {
+                return "";
+            }
+            InternetAddress from = (InternetAddress) fromAddresses[0];
+            String personal = from.getPersonal();
+            return (personal != null && !personal.isBlank()) ? personal : from.getAddress();
+        } catch (MessagingException e) {
+            throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED,
+                    "Failed to extract sender name from message", e);
+        }
+    }
 }

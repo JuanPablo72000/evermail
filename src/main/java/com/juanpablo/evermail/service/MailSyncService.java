@@ -150,6 +150,7 @@ public class MailSyncService {
         mail.setIdAccount(account.getIdAccount());
         mail.setIdSenderAddress(sender.getIdAddress());
         mail.setServerMessageId(serverMessageId);
+        mail.setSenderDisplayName(MimeUtil.extractSenderName(message));
         mail.setSubject(MimeUtil.extractSubject(message));
         mail.setBodyPlainText(MimeUtil.extractPlainText(message));
         mail.setBodyHTML(null);

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS mail (
     body_plain_text TEXT,
     body_html TEXT,
     date_received TEXT NOT NULL,
+    sender_display_name TEXT,
     FOREIGN KEY (id_account) REFERENCES account (id_account) ON DELETE CASCADE,
     FOREIGN KEY (id_sender_address) REFERENCES email_address (id_address) ON DELETE RESTRICT,
     FOREIGN KEY (id_reply_to_mail) REFERENCES mail (id_mail) ON DELETE SET NULL
@@ -98,4 +99,3 @@ CREATE INDEX IF NOT EXISTS idx_mail_id_account ON mail (id_account);
 CREATE INDEX IF NOT EXISTS idx_draft_id_account ON draft (id_account);
 CREATE INDEX IF NOT EXISTS idx_attachment_id_mail ON attachment (id_mail);
 CREATE INDEX IF NOT EXISTS idx_label_id_account ON label (id_account);
-

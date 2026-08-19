@@ -14,6 +14,9 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.sql.Types;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Pure CRUD over the mail table. bodyPlainText/bodyHTML are received and
@@ -24,6 +27,7 @@ import java.util.List;
 public class MailDAO {
 
     private final SqliteConnectionProvider connectionProvider;
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     public MailDAO(SqliteConnectionProvider connectionProvider) {
         this.connectionProvider = connectionProvider;
@@ -78,20 +82,28 @@ public class MailDAO {
     }
 
     public int insert(Mail mail) throws DatabaseException {
-        String sql = "INSERT INTO mail (id_account, id_sender_address, id_reply_to_mail, server_message_id, "
-                + "subject, body_plain_text, body_html, date_received) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = """
+            INSERT INTO mail (id_account, id_sender_address, id_reply_to_mail, server_message_id,
+                              subject, body_plain_text, body_html, date_received, sender_display_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
 
         synchronized (connectionProvider) {
             Connection connection = connectionProvider.getConnection();
             try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 statement.setInt(1, mail.getIdAccount());
                 statement.setInt(2, mail.getIdSenderAddress());
-                setNullableInt(statement, 3, mail.getIdReplyToMail());
+                if (mail.getIdReplyToMail() != null) {
+                    statement.setInt(3, mail.getIdReplyToMail());
+                } else {
+                    statement.setNull(3, Types.INTEGER);
+                }
                 statement.setString(4, mail.getServerMessageId());
                 statement.setString(5, mail.getSubject());
                 statement.setString(6, mail.getBodyPlainText());
                 statement.setString(7, mail.getBodyHTML());
-                statement.setString(8, mail.getDateReceived().toString());
+                statement.setString(8, mail.getDateReceived().format(DATE_FORMAT));
+                statement.setString(9, mail.getSenderDisplayName());
 
                 statement.executeUpdate();
 
@@ -135,14 +147,15 @@ public class MailDAO {
         mail.setIdAccount(resultSet.getInt("id_account"));
         mail.setIdSenderAddress(resultSet.getInt("id_sender_address"));
 
-        int idReplyToMail = resultSet.getInt("id_reply_to_mail");
-        mail.setIdReplyToMail(resultSet.wasNull() ? null : idReplyToMail);
+        int replyTo = resultSet.getInt("id_reply_to_mail");
+        mail.setIdReplyToMail(resultSet.wasNull() ? null : replyTo);
 
         mail.setServerMessageId(resultSet.getString("server_message_id"));
         mail.setSubject(resultSet.getString("subject"));
         mail.setBodyPlainText(resultSet.getString("body_plain_text"));
         mail.setBodyHTML(resultSet.getString("body_html"));
-        mail.setDateReceived(LocalDate.parse(resultSet.getString("date_received")));
+        mail.setDateReceived(LocalDate.parse(resultSet.getString("date_received"), DATE_FORMAT));
+        mail.setSenderDisplayName(resultSet.getString("sender_display_name"));
 
         return mail;
     }
