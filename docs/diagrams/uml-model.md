@@ -1,119 +1,155 @@
+# Modelo de dominio final
+
+**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+
 ```mermaid
 classDiagram
     class Account {
-        int id_account PK
-        int id_profile FK
-        int id_address FK
-        string signature
-        string accountName
-        string accessToken
-        string refreshToken
-        dateTime tokenExpiresAt
-        OAuthProvider provider
+        -UUID id
+        -OAuthProvider provider
+        -String providerSubject
+        -String email
+        -String displayName
+        -String keyRef
+        -AccountStatus status
     }
-
-    class AppProfile {
-        int id_profile PK
-        string theme
-        int syncIntervalMinutes
-        string language
-        boolean notificationsEnabled
+    class OAuthCredentials {
+        -String accessToken
+        -String refreshToken
+        -Instant expiresAt
     }
-
-    class EmailAddress {
-        int id_address PK
-        string email
-        boolean isInternal
+    class MailHeader {
+        -UUID id
+        -UUID accountId
+        -MailDirection direction
+        -RemoteMailId remoteId
+        -String messageId
+        -UUID outboundId
+        -String senderEmail
+        -String senderName
+        -String subject
+        -Instant occurredAt
+        -boolean read
+        -boolean bodyCached
     }
-
-    class Mail {
-	    int id_mail PK
-	    int id_account FK
-	    int id_sender_address FK
-	    int id_reply_to_mail FK
-	    string serverMessageId
-	    string subject
-	    string bodyPlainText
-	    string bodyHTML
-	    date dateReceived
-	}
-
-    class Draft {
-        int id_draft PK
-        int id_account FK
-        string subject
-        string bodyPlainText
-        date lastEdited
+    class RemoteMailId {
+        -long uidValidity
+        -long uid
     }
-
-    class Attachment {
-        int id_attachment PK
-        int id_mail FK
-        string fileName
-        string mimeType
-        int sizeBytes
-        string filePath
+    class MailContent {
+        -UUID mailId
+        -String plainText
+        -List~Recipient~ recipients
     }
-
-    class Label {
-        int id_label PK
-        int id_account FK
-        string name
+    class Recipient {
+        -String email
+        -String addressKey
+        -String displayName
+        -RecipientType type
     }
-
-    class Mail_Label {
-        int id_mail PK, FK
-        int id_label PK, FK
-        boolean isRead
+    class ComposeRequest {
+        -UUID submissionId
+        -UUID accountId
+        -String subject
+        -String plainText
+        -List~Recipient~ recipients
     }
-
-    class Mail_Address {
-        int id_mail PK, FK
-        int id_address PK, FK
-        string recipientType 
+    class OutboxMessage {
+        -UUID id
+        -UUID accountId
+        -String messageId
+        -String subject
+        -String plainText
+        -List~Recipient~ recipients
+        -DeliveryState state
+        -Instant createdAt
+        -Instant updatedAt
+        -ErrorCode lastError
     }
-
-    class Draft_Address {
-        int id_draft PK, FK
-        int id_address PK, FK
-        string recipientType
+    class InboxCursor {
+        -UUID accountId
+        -long uidValidity
+        -long beforeUid
     }
-
+    class InboxPage {
+        -List~MailHeader~ items
+        -InboxCursor nextCursor
+        -boolean hasMore
+        -boolean stale
+        -boolean needsRemote
+    }
+    class SendResult {
+        -UUID submissionId
+        -DeliveryState state
+        -UUID sentMailId
+        -ErrorCode error
+    }
+    class StartupResult {
+        -Account account
+        -StartupStatus status
+    }
     class OAuthProvider {
-        <<Enumeration>>
+        <<enumeration>>
         GOOGLE
         MICROSOFT
-        +getAuthorizationEndpoint() String
-        +getTokenEndpoint() String
-        +getScopes() List~String~
-        +requiresClientSecret() boolean
-        +getImapHost() String
-        +getImapPort() int
-        +getSmtpHost() String
-        +getSmtpPort() int
     }
-
-    %% Relations
-    AppProfile "1" --> "*" Account : Manages
-    EmailAddress "1" --> "0..1" Account : Identifies
-    Account "1" --> "*" Label : Has
-    Account "1" --> "*" Mail : Contains
-    Account "1" --> "*" Draft : Writes
-    EmailAddress "1" --> "*" Mail : Sends
-    Mail "1" --> "*" MailLabel : Has
-    Label "1" --> "*" MailLabel : Groups
-    Mail "1" *-- "*" Attachment : Contains
-    Mail "1" --> "1..*" MailAddress : Delivered to
-    EmailAddress "1" --> "*" MailAddress : Receives
-    Mail "*" --> "0..1" Mail : Replies to
-    Draft "1" --> "*" DraftAddress : Addressed to
-    EmailAddress "1" --> "*" DraftAddress : Receives
+    class AccountStatus {
+        <<enumeration>>
+        PROVISIONING
+        ACTIVE
+        REAUTH_REQUIRED
+        DISCONNECTING
+    }
+    class MailDirection {
+        <<enumeration>>
+        INBOX
+        SENT
+    }
+    class RecipientType {
+        <<enumeration>>
+        TO
+        CC
+        BCC
+    }
+    class DeliveryState {
+        <<enumeration>>
+        PENDING
+        SENDING
+        ACCEPTED
+        RECORDED
+        FAILED
+        UNKNOWN
+    }
+    class StartupStatus {
+        <<enumeration>>
+        LOGIN_REQUIRED
+        READY
+        OFFLINE
+        RECOVERY_REQUIRED
+    }
+    Account --> OAuthProvider
+    Account --> AccountStatus
+    MailHeader --> MailDirection
+    MailHeader --> RemoteMailId
+    Recipient --> RecipientType
+    ComposeRequest --> Recipient
+    OutboxMessage --> Recipient
+    OutboxMessage --> DeliveryState
+    InboxPage --> MailHeader
+    InboxPage --> InboxCursor
+    MailContent --> Recipient
+    SendResult --> DeliveryState
+    StartupResult --> Account
 ```
 
-**Key syntax used here:**
-- `<<Abstract>>`: Defines an abstract class or interface.
-- `<|--`: **Inheritance.** (E.g. A Customer _is a_ User).
-- `*--`: **Composition.** Life-or-death relationship (e.g. an _OrderItem_ makes no sense without its _Order_).
-- `o--`: **Aggregation.** Relationship where the objects are independent (e.g. a _Product_ still exists in the store even if the _OrderItem_ is deleted).
-- `-->`: **Simple association.**
-- `-`, `+`, `#`: Access modifiers (Private, Public, Protected).
+## Contratos
+
+Los modelos son inmutables; cualquier transición genera una nueva instancia. Los objetos de dominio contienen texto descifrado únicamente cuando se necesita. OAuthCredentials nunca llega a los controladores y sus valores no aparecen en toString, logs ni errores.
+
+RemoteMailId es opcional para SENT y obligatorio para INBOX. InboxCursor es opaco para la interfaz: no puede trasladarse entre cuentas ni entre generaciones UIDVALIDITY. nextCursor es NULL cuando no hay siguiente página conocida; needsRemote distingue caché incompleta de fin de buzón.
+
+ComposeRequest.submissionId se genera una vez por acción de envío y se conserva al repetir la misma petición. Una petición con ese ID y distinto contenido es inválida. RECORDED referencia sentMailId; otros resultados pueden no tenerlo.
+
+MailContent expone solo texto legible. MimeUtil convierte HTML cuando no hay texto plano, sin ejecutar HTML ni cargar recursos externos. No se modela descarga de adjuntos en el MVP.
+
+La correspondencia física está en el [ER](er-diagram.md). Los DAO utilizan filas de persistencia separadas (AccountRow, MailRow, OutboxRow e InboxStateRow) con campos cifrados tal como figuran allí; no mutan estos modelos para cifrarlos.

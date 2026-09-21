@@ -1,37 +1,40 @@
 package com.juanpablo.evermail.facade;
 
-import com.juanpablo.evermail.model.Account;
-import com.juanpablo.evermail.model.OAuthProvider;
+import com.juanpablo.evermail.model.*;
 import com.juanpablo.evermail.service.AuthService;
+import com.juanpablo.evermail.config.*;
 import javafx.concurrent.Task;
+import java.util.UUID;
 
-/**
- * Exposure layer for authentication. Only builds and returns Tasks; the
- * controller decides when to run them.
- */
+/** Backend task adapter. Creating a task never starts it or changes a screen. */
 public class AuthFacade {
+    private final AuthService auth;
 
-    private final AuthService authService;
-
-    public AuthFacade(AuthService authService) {
-        this.authService = authService;
+    public AuthFacade(AuthService auth) {
+        this.auth = auth;
     }
 
     public Task<Account> loginTask(OAuthProvider provider) {
+        CancellationToken cancellation = new CancellationToken();
         return new Task<>() {
             @Override
             protected Account call() throws Exception {
-                return authService.login(provider);
+                return auth.login(provider, cancellation);
+            }
+
+            @Override
+            protected void cancelled() {
+                cancellation.cancel();
             }
         };
     }
 
-    public Task<Void> logoutTask(Account account) {
+    public Task<Void> logoutTask(UUID accountId) {
+        
         return new Task<>() {
             @Override
             protected Void call() throws Exception {
-                authService.logout(account);
-                return null;
+                auth.logout(accountId); return null;
             }
         };
     }

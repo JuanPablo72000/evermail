@@ -1,110 +1,107 @@
+# Servicios finales
+
+**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+
 ```mermaid
 classDiagram
+    class StartupService {
+        +start(Deadline deadline) StartupResult
+    }
     class AuthService {
-    <<Service>>
-        -AccountRepository accountRepository
-        -EnvConfig envConfig
-        -SecurityUtil securityUtil
-        -HttpClient httpClient
-        +AuthService(AccountRepository accountRepository, EnvConfig envConfig, SecurityUtil securityUtil)
-        +login(OAuthProvider provider) Account
-        +refreshTokenIfNeeded(Account account) void
-        +logout(Account account) void
+        +login(OAuthProvider provider, CancellationToken cancel) Account
+        +restoreSession(Deadline deadline) StartupResult
+        +ensureCredentials(UUID accountId, Deadline deadline) OAuthCredentials
+        +logout(UUID accountId) void
+        +recoverAccountLifecycle() void
     }
     class MailSessionProvider {
-        <<Service>>
-        +getImapStore(Account account) Store
-        +getSmtpTransport(Account account) Transport
-        +createSmtpSession() Session
+        +openInbox(UUID accountId, Deadline deadline) InboxSession
+        +openSmtp(UUID accountId, Deadline deadline) SmtpSession
     }
-    class MailSyncService {
-        <<Service>>
-        +syncInbox(Account account) List~Mail~
-        +markAsRead(Mail mail, Label label) void
+    class InboxService {
+        +readCached(UUID accountId, InboxCursor cursor) InboxPage
+        +refresh(UUID accountId, Deadline deadline) InboxPage
+        +loadMore(UUID accountId, InboxCursor cursor, Deadline deadline) InboxPage
+        +openHeader(UUID accountId, UUID mailId) MailHeader
+        +loadContent(UUID accountId, UUID mailId, Deadline deadline) MailContent
+        +markRead(UUID accountId, UUID mailId) void
+    }
+    class ComposeService {
+        +validate(ComposeRequest request) ComposeRequest
     }
     class MailSendService {
-        <<Service>>
-        +sendDraft(Draft draft, List~String~ to, List~String~ cc, List~String~ bcc) Mail
+        +send(ComposeRequest request, Deadline deadline) SendResult
+        +recover(UUID accountId) void
     }
-    class DraftService {
-        <<Service>>
-        +createDraft(Account account) Draft
-        +updateDraft(Draft draft, List~DraftAddress~ recipients) void
-        +resolveRecipient(String email, String recipientType) DraftAddress
-        +discardDraft(Draft draft) void
-        +delete(Draft draft) void
+    class AccountCoordinator {
+        +runExclusive(UUID accountId, AccountWork work) Object
+        +beginLogout(UUID accountId) void
     }
-    class AttachmentService {
-        <<Service>>
-        +downloadAttachment(Attachment attachment, Account account) File
-    }
-    %% Collaboration between services (constructor injection)
-    MailSessionProvider --> AuthService : uses
-    MailSyncService --> MailSessionProvider : uses
-    MailSendService --> MailSessionProvider : uses
-    MailSendService --> DraftService : uses
-    AttachmentService --> MailSessionProvider : uses
-    %% Dependencies toward model
-    AuthService --> OAuthProvider : uses
-    %% Dependencies toward util
-    AuthService --> SecurityUtil : uses
-    MailSyncService --> MimeUtil : uses
-    MailSendService --> EmailValidator : uses
-    AttachmentService --> FileUtil : uses
-    AttachmentService --> SecurityUtil : uses
-    %% Dependencies toward config
-    AuthService --> EnvConfig : uses
-    %% Dependencies toward repository
-    AuthService --> AccountRepository : uses
-    MailSessionProvider --> AccountRepository : uses
-    MailSyncService --> MailRepository : uses
-    MailSyncService --> AccountRepository : uses
-    MailSendService --> MailRepository : uses
-    MailSendService --> AccountRepository : uses
-    DraftService --> DraftRepository : uses
-    DraftService --> AccountRepository : uses
-    AttachmentService --> MailRepository : uses
-    %% Dependencies toward exception (throws)
-    AuthService ..> OAuthAuthenticationException : throws
-    MailSessionProvider ..> MailFetchException : throws
-    MailSessionProvider ..> MailSendException : throws
-    MailSyncService ..> MailFetchException : throws
-    MailSyncService ..> CryptoException : throws
-    MailSendService ..> MailSendException : throws
-    MailSendService ..> InvalidEmailAddressException : throws
-    MailSendService ..> CryptoException : throws
-    AttachmentService ..> AttachmentException : throws
-    AttachmentService ..> CryptoException : throws
-    AuthService ..> DatabaseException : throws
-    AuthService ..> CryptoException : throws
-    MailSyncService ..> DatabaseException : throws
-    MailSendService ..> DatabaseException : throws
-    DraftService ..> DatabaseException : throws
-    DraftService ..> CryptoException : throws
-    AttachmentService ..> DatabaseException : throws
+    StartupService --> DatabaseMigrator
+    StartupService --> AuthService
+    StartupService --> MailSendService
+    AuthService --> OAuthClient
+    AuthService --> AccountRepository
+    AuthService --> KeyStoreService
+    MailSessionProvider --> AuthService
+    MailSessionProvider --> ProviderConfig
+    InboxService --> MailSessionProvider
+    InboxService --> MailRepository
+    InboxService ..> MimeUtil
+    ComposeService ..> EmailValidator
+    MailSendService --> ComposeService
+    MailSendService --> MailSessionProvider
+    MailSendService --> OutboxRepository
+    AuthService --> AccountCoordinator
+    InboxService --> AccountCoordinator
+    MailSendService --> AccountCoordinator
 ```
-Key syntax used here:
-`<<Service>>`: Stereotype marking classes in the business logic layer, protocol-aware but with no knowledge of JavaFX.
-`-->`: Association/Usage. The source class holds a reference (constructor-injected) toward the referenced class and invokes it directly.
-`..>`: Dependency. The source class throws the referenced exception, without containing it nor inheriting from it.
-`-`, `+`: Access modifiers (Private, Public).
 
-Design notes:
-1. `OAuthProvider` is an enumeration that lives in the `model` package (drawn in `uml-model.md`; shown here only as the type `AuthService` consumes). Each constant centralizes its provider's configuration — authorization endpoint, token endpoint, OAuth scopes, whether the token request must include `client_secret`, and the IMAP/SMTP hosts/ports — so that both `AuthService` and `MailSessionProvider` are single algorithms parameterized by provider. Google sends `client_secret`; Microsoft is registered as a public client (PKCE-only) and does not.
+## Sesión y arranque
 
-2. `AuthService.login()` implements the OAuth 2.0 Authorization Code flow with PKCE **manually**, using JDK classes only — no external OAuth SDK: `java.net.http.HttpClient` (held as a private field, built once in the constructor) for the POST calls to the provider's `/token` endpoint; `Desktop.browse(URI)` to open the authorization URL in the system browser; `com.sun.net.httpserver.HttpServer` on an ephemeral loopback port (`http://127.0.0.1:{port}/callback`) to capture the redirect; `MessageDigest` + `SecureRandom` for the PKCE `code_verifier`/`code_challenge`; and Gson to parse the JSON token response and the `id_token` claims (email/name). The system browser + loopback redirect is the only viable presentation: Google blocks OAuth inside embedded WebViews by policy and RFC 8252 recommends an external user agent for native apps. `AuthService` does **not** encrypt anything: it hands plain-text tokens to `AccountRepository.create()`, which owns the encryption orchestration (the old §5.3 sequence showing AuthService encrypting is superseded by this note).
+StartupService prepara SQLite, recupera operaciones locales y devuelve estado antes del presupuesto de 5 s cuando el entorno lo permite; al agotarlo muestra un estado de recuperación/carga, nunca una sesión ficticia. La renovación de red no impide abrir una caché disponible; OFFLINE lo comunica.
 
-3. `AuthService` receives `AccountRepository`, `EnvConfig` and `SecurityUtil` via constructor injection. `SecurityUtil` is used only for `isTokenExpired()` inside `refreshTokenIfNeeded()` — keeping expiration logic centralized; token decryption is never done here because accounts always arrive already decrypted from `AccountRepository`.
+OAuthClient implementa Authorization Code + PKCE y state, navegador externo y callback loopback. Valida emisor, audiencia, expiración y firma del ID token con claves del proveedor. El callback solo completa la operación con state correcto y código/error válido; peticiones ajenas no consumen el intento. Cierra servidor al finalizar/cancelar.
 
-4. `MailSessionProvider` centralizes the creation of all authenticated Jakarta Mail sessions (IMAP `Store` and SMTP `Transport`) using XOAUTH2. Before opening any connection it delegates to `AuthService.refreshTokenIfNeeded()` to guarantee a valid token. It depends on `AccountRepository` solely to resolve the account's own email (`getEmailOfAccount`), because XOAUTH2 requires the user's email — not just the access token — to authenticate. It does **not** depend on `SecurityUtil`: the account's tokens arrive decrypted from the repository. `createSmtpSession()` centralizes the SMTP `Session` configuration (XOAUTH2 + STARTTLS) so `MailSendService` can build its `MimeMessage` against the same configuration the `Transport` uses (`Service.getSession()` is package-private in Jakarta Mail and cannot be called from outside).
+La identidad estable usa issuer + sub. Una reautorización reutiliza accountId y key_ref. Si falta refresh_token conserva el anterior de esa identidad; para una cuenta nueva exige consentimiento que lo proporcione o falla sin activar la cuenta.
 
-5. `MailSendService.sendDraft()` concentrates the entire "send = delete Draft + create Mail" business rule documented in the E-R model. Recipients travel as raw email strings (To/CC/BCC) because neither `Draft` nor `Mail` carry recipient lists as fields — the compose screen submits exactly what the user typed. Every address is validated (`EmailValidator`), resolved to its `email_address` row via `AccountRepository.resolveOrCreateAddress`, sent via SMTP (through `MailSessionProvider`), and only if the send succeeds does it invoke `DraftService.delete()` followed by `MailRepository.save()` of the sent Mail — preventing the `facade` from coordinating two services and risking an inconsistent state on a partial failure.
+Alta: persistir PROVISIONING con UUID y key_ref; crear clave externa; cifrar y activar. Si falla se compensan clave/fila. El arranque recupera PROVISIONING incompletos, sin mostrarlos como sesiones válidas.
 
-6. `DraftService` keeps an internal `delete()` method in addition to `discardDraft()`: both delete the Draft without leaving a trace, but `discardDraft()` is the user-triggered "Discard" action, while `delete()` is invoked only by `MailSendService` after a successful send. `createDraft()` returns an in-memory Draft (nothing persisted); the first `updateDraft()` inserts it, since `DraftRepository.save` decides insert vs. update by `idDraft == null` — an empty compose window never leaves a ghost row. `updateDraft` takes the recipient list as a separate parameter (wholesale replacement), and `resolveRecipient()` turns a raw email string into a `DraftAddress` ready to save.
+La renovación se serializa por cuenta y vuelve a comprobar expiración tras obtener el turno; usa margen de 60 s. Fallos de red permiten caché offline; rechazo de autorización cambia a REAUTH_REQUIRED.
 
-7. `MailSyncService.syncInbox()` fetches the most recent mails from the remote INBOX and persists only those whose Message-ID is not already in the local cache (dedup by `server_message_id`), returning the refreshed local inbox. The sender is resolved via `AccountRepository.resolveOrCreateAddress` (external), the account itself is recorded as the sole recipient, and attachment **metadata only** is persisted (binaries stay on the server until the user downloads them via `AttachmentService`). `markAsRead()` operates on the pair `(Mail, Label)`, reflecting the E-R model where `isRead` lives in `Mail_Label` — a mail can be read under one label and unread under another.
+Logout bloquea nuevas operaciones y marca DISCONNECTING. Cancela descargas/renovaciones y espera cierre del trabajador SMTP o lo clasifica UNKNOWN antes de liberar recursos. Elimina la clave externa de forma idempotente y después los datos locales; un fallo conserva DISCONNECTING para reintentar limpieza en el próximo arranque. No se promete revocación remota de permisos OAuth.
 
-8. `AttachmentService.downloadAttachment()` re-locates the raw MIME part on IMAP (the store/folder stays open until the stream is consumed) and hands the stream to `FileUtil.downloadAttachment(accountId, fileName, remoteStream, key, securityUtil)` — **FileUtil owns the encryption-at-rest and the disk write** for attachments; `AttachmentService` only resolves the `SecretKey` via `SecurityUtil.retrieveAesKey` and, once the file exists, persists its path via `MailRepository.updateAttachmentPath()` so subsequent opens are local-only.
-No class in this package is aware of JavaFX's `Task<T>` nor handles threading: all methods are synchronous and blocking. That asynchrony responsibility is fully delegated to the `facade` package, which wraps every call to `service` inside a `Task<T>`.
-Each Service depends on exactly the Repository that corresponds to its domain aggregate, plus `AccountRepository` wherever an email-address resolution is needed (`MailSessionProvider`, `MailSyncService`, `MailSendService`, `DraftService`) — services never touch DAOs nor `SqliteConnectionProvider`.
-Since every Repository propagates `DatabaseException` and `CryptoException` without transforming them (see `uml-repositories.md`, notes 7–8), every Service that depends on one also declares both among its possible thrown exceptions, in addition to its own domain-specific ones (`OAuthAuthenticationException`, `MailSendException`, `MailFetchException`, `AttachmentException`).
+## Bandeja y lectura
+
+InboxSession usa IMAPS, propiedades mail.imaps.*, XOAUTH2, validación TLS, timeouts y cierre determinista. No descarga todo el buzón: usa UID, rangos y fetch de metadatos.
+
+readCached no hace red. refresh trae los 50 más recientes, conserva cuerpos existentes y reconcilia los UID del intervalo visible. loadMore consulta una página local completa o recupera hasta 50 UID inferiores al cursor; confirma cobertura solo tras completar la página. Los nuevos mensajes no desplazan el cursor de páginas anteriores. Un UIDVALIDITY distinto invalida cursores y obliga a refrescar.
+
+openHeader lee caché; loadContent lee primero cuerpo local y, si falta, obtiene el mensaje por UID. No descarga adjuntos ni imágenes remotas. Si el mensaje dejó de existir informa MAIL_NOT_FOUND y actualiza caché. La lectura se marca localmente al mostrar contenido.
+
+## Envío y recuperación
+
+ComposeService exige destinatarios válidos y resuelve duplicados antes de guardar o conectar. SmtpSession usa XOAUTH2 y STARTTLS obligatorio con validación de servidor. El mensaje y Message-ID se construyen una vez por submissionId.
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING : preparar transaccion local
+    PENDING --> SENDING : claim atomico
+    SENDING --> ACCEPTED : SMTP confirma entrega
+    SENDING --> FAILED : rechazo definitivo sin entrega
+    SENDING --> UNKNOWN : desconexion o timeout ambiguo
+    ACCEPTED --> RECORDED : guardar SENT en transaccion
+    RECORDED --> [*]
+    FAILED --> [*]
+    UNKNOWN --> [*]
+```
+
+FAILED solo se utiliza si se sabe que no hubo entrega a ningún destinatario. Aceptación parcial o pérdida de respuesta después de transmitir datos produce UNKNOWN. SmtpSession deshabilita envío parcial cuando el servidor rechaza destinatarios antes de DATA; aun así trata respuestas ambiguas sin reenviar.
+
+No se devuelve ACCEPTED sin persistir esa confirmación. Si la confirmación SMTP llegó pero falla el guardado local, se informa resultado incierto/local pendiente y no se repite SMTP. Tras reiniciar, SENDING se convierte en UNKNOWN; ACCEPTED se registra localmente sin enviar otra vez. PENDING solo continúa mediante una acción explícita. UNKNOWN nunca se reintenta automáticamente. No es posible garantizar exactamente una entrega entre SMTP y SQLite.
+
+El presupuesto de envío es 4 s. Agotarlo actualiza la interfaz y solicita interrupción/cierre del transporte; no libera el bloqueo del intento mientras siga activo el trabajador ni presupone que el servidor no recibió el mensaje.
+
+## Ejecución
+
+Todos los servicios son síncronos, sin JavaFX. Deadline es un plazo absoluto compartido: cada paso usa el tiempo restante, no reinicia el presupuesto. AccountWork abrevia una función genérica; AccountCoordinator no mantiene transacciones SQL durante red. El planificador permite que una lectura de caché no espere a una sincronización de red; la exclusión se aplica a renovación, envío, logout y confirmaciones de cambios incompatibles.

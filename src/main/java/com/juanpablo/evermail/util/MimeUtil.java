@@ -2,94 +2,131 @@ package com.juanpablo.evermail.util;
 
 import com.juanpablo.evermail.exception.ErrorCode;
 import com.juanpablo.evermail.exception.MailFetchException;
-import jakarta.mail.Address;
-import jakarta.mail.Message;
-import jakarta.mail.MessagingException;
-import jakarta.mail.Multipart;
-import jakarta.mail.Part;
+import com.juanpablo.evermail.model.Recipient;
+import com.juanpablo.evermail.model.RecipientType;
+import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
-
-import java.io.IOException;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.HTML;
+import javax.swing.text.html.parser.ParserDelegator;
+import javax.swing.text.MutableAttributeSet;
+import java.io.StringReader;
+import java.util.*;
 
 public final class MimeUtil {
-
     private MimeUtil() {
-        // Prevents instantiation — this class only holds static methods.
     }
 
-    public static String extractPlainText(Message mimeMessage) throws MailFetchException {
+    public static String extractReadableText(Part message) throws MailFetchException {
         try {
-            Object content = mimeMessage.getContent();
+            return extract(message, 0);
+        } catch (Exception e) {
+            throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Cannot decode message body", e);
+        }
+    }
 
-            if (content instanceof String text) {
-                return text;
-            }
-
-            if (content instanceof Multipart multipart) {
-                StringBuilder plainText = new StringBuilder();
+    private static String extract(Part part, int depth) throws Exception {
+        if (depth > 40) {
+            throw new IllegalArgumentException("MIME nesting limit exceeded");
+        }
+        if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()) || part.getFileName() != null) {
+            return "";
+        }
+        if (part.isMimeType("text/plain")) {
+            return (String) part.getContent();
+        }
+        if (part.isMimeType("text/html")) {
+            return htmlToText((String) part.getContent());
+        }
+        if (part.isMimeType("multipart/*")) {
+            Multipart multipart = (Multipart) part.getContent();
+            boolean alternative = part.isMimeType("multipart/alternative");
+            if (alternative) {
                 for (int i = 0; i < multipart.getCount(); i++) {
-                    Part part = multipart.getBodyPart(i);
-                    if (part.isMimeType("text/plain")) {
-                        plainText.append(part.getContent());
+                    Part child = multipart.getBodyPart(i);
+                    if (child.isMimeType("text/plain") && child.getFileName() == null
+                            && !Part.ATTACHMENT.equalsIgnoreCase(child.getDisposition())) {
+                        return extract(child, depth + 1);
                     }
                 }
-                return plainText.toString();
             }
-
-            return "";
-
-        } catch (MessagingException | IOException e) {
-            throw new MailFetchException(
-                    ErrorCode.IMAP_FETCH_FAILED,
-                    "Failed to extract plain text from message",
-                    e
-            );
+            List<String> pieces = new ArrayList<>();
+            for (int i = 0; i < multipart.getCount(); i++) {
+                String text = extract(multipart.getBodyPart(i), depth + 1);
+                if (!text.isBlank()) {
+                    if (alternative) {
+                        return text;
+                    }
+                    pieces.add(text);
+                }
+            }
+            return String.join("\n", pieces);
         }
+        return "";
     }
 
-    public static String extractSender(Message mimeMessage) throws MailFetchException {
-        try {
-            Address[] fromAddresses = mimeMessage.getFrom();
-            if (fromAddresses == null || fromAddresses.length == 0) {
-                return "";
-            }
-            return ((InternetAddress) fromAddresses[0]).getAddress();
+    public static String htmlToText(String html) throws Exception {
+        StringBuilder output = new StringBuilder();
+        new ParserDelegator().parse(new StringReader(html), new HTMLEditorKit.ParserCallback() {
+            private int suppressed;
 
-        } catch (MessagingException e) {
-            throw new MailFetchException(
-                    ErrorCode.IMAP_FETCH_FAILED,
-                    "Failed to extract sender from message",
-                    e
-            );
-        }
+            @Override
+            public void handleStartTag(HTML.Tag tag, MutableAttributeSet attributes, int pos) {
+                if (tag == HTML.Tag.SCRIPT || tag == HTML.Tag.STYLE) {
+                    suppressed++;
+                } else if (tag.isBlock() && !output.isEmpty()) {
+                    output.append('\n');
+                }
+            }
+
+            @Override
+            public void handleEndTag(HTML.Tag tag, int pos) {
+                if (tag == HTML.Tag.SCRIPT || tag == HTML.Tag.STYLE) {
+                    suppressed = Math.max(0, suppressed - 1);
+                }
+            }
+
+            @Override
+            public void handleSimpleTag(HTML.Tag tag, MutableAttributeSet attributes, int pos) {
+                if (tag == HTML.Tag.BR) {
+                    output.append('\n');
+                }
+            }
+
+            @Override
+            public void handleText(char[] data, int pos) {
+                if (suppressed == 0) {
+                    output.append(data);
+                }
+            }
+        }, true);
+        return output.toString().strip();
     }
 
-    public static String extractSubject(Message mimeMessage) throws MailFetchException {
+    public static List<Recipient> extractRecipients(Message message) throws MailFetchException {
         try {
-            String subject = mimeMessage.getSubject();
-            return subject != null ? subject : "";
-
-        } catch (MessagingException e) {
-            throw new MailFetchException(
-                    ErrorCode.IMAP_FETCH_FAILED,
-                    "Failed to extract subject from message",
-                    e
-            );
-        }
-    }
-
-    public static String extractSenderName(Message mimeMessage) throws MailFetchException {
-        try {
-            Address[] fromAddresses = mimeMessage.getFrom();
-            if (fromAddresses == null || fromAddresses.length == 0) {
-                return "";
+            var found = new LinkedHashMap<String, Recipient>();
+            Message.RecipientType[] types = {Message.RecipientType.TO, Message.RecipientType.CC, Message.RecipientType.BCC};
+            RecipientType[] roles = {RecipientType.TO, RecipientType.CC, RecipientType.BCC};
+            for (int i = 0; i < types.length; i++) {
+                Address[] addresses = message.getRecipients(types[i]);
+                if (addresses == null) {
+                    continue;
+                }
+                for (Address raw : addresses) {
+                    if (raw instanceof InternetAddress address) {
+                        try {
+                            String normalized = EmailValidator.normalize(address.getAddress());
+                            found.putIfAbsent(normalized, new Recipient(normalized, normalized, address.getPersonal(), roles[i]));
+                        } catch (Exception ignored) {
+                            // A malformed remote recipient must not hide an otherwise readable message.
+                        }
+                    }
+                }
             }
-            InternetAddress from = (InternetAddress) fromAddresses[0];
-            String personal = from.getPersonal();
-            return (personal != null && !personal.isBlank()) ? personal : from.getAddress();
+            return List.copyOf(found.values());
         } catch (MessagingException e) {
-            throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED,
-                    "Failed to extract sender name from message", e);
+            throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Cannot decode recipients", e);
         }
     }
 }

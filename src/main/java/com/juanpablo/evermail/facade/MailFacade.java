@@ -1,38 +1,82 @@
 package com.juanpablo.evermail.facade;
 
-import com.juanpablo.evermail.model.Account;
-import com.juanpablo.evermail.model.Label;
-import com.juanpablo.evermail.model.Mail;
-import com.juanpablo.evermail.service.MailSyncService;
+import com.juanpablo.evermail.model.*;
+import com.juanpablo.evermail.config.AppConstants;
+import com.juanpablo.evermail.config.Deadline;
+import com.juanpablo.evermail.service.InboxService;
 import javafx.concurrent.Task;
+import java.util.UUID;
 
-import java.util.List;
-
-/**
- * Exposure layer for inbox synchronization and read-state.
- */
+/** Creates backend tasks without starting them or changing any screen. */
 public class MailFacade {
+    private final InboxService inbox;
 
-    private final MailSyncService mailSyncService;
-
-    public MailFacade(MailSyncService mailSyncService) {
-        this.mailSyncService = mailSyncService;
+    public MailFacade(InboxService inbox) {
+        this.inbox = inbox;
     }
 
-    public Task<List<Mail>> syncInboxTask(Account account) {
+    public Task<InboxPage> cachedInboxTask(UUID accountId, InboxCursor cursor) {
+        Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
         return new Task<>() {
             @Override
-            protected List<Mail> call() throws Exception {
-                return mailSyncService.syncInbox(account);
+            protected InboxPage call() throws Exception {
+                deadline.check();
+                return inbox.readCached(accountId, cursor);
             }
         };
     }
 
-    public Task<Void> markAsReadTask(Mail mail, Label label) {
+    public Task<InboxPage> refreshInboxTask(UUID accountId) {
+        Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
+        return new Task<>() {
+            @Override
+            protected InboxPage call() throws Exception {
+                deadline.check();
+                return inbox.refresh(accountId, deadline);
+            }
+        };
+    }
+
+    public Task<InboxPage> loadMoreTask(UUID accountId, InboxCursor cursor) {
+        Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
+        return new Task<>() {
+            @Override
+            protected InboxPage call() throws Exception {
+                deadline.check();
+                return inbox.loadMore(accountId, cursor, deadline);
+            }
+        };
+    }
+
+    public Task<MailHeader> openHeaderTask(UUID accountId, UUID mailId) {
+        Deadline deadline = Deadline.after(AppConstants.OPEN_HEADER_BUDGET);
+        return new Task<>() {
+            @Override
+            protected MailHeader call() throws Exception {
+                deadline.check();
+                return inbox.openHeader(accountId, mailId);
+            }
+        };
+    }
+
+    public Task<MailContent> loadContentTask(UUID accountId, UUID mailId) {
+        Deadline deadline = Deadline.after(AppConstants.CONTENT_BUDGET);
+        return new Task<>() {
+            @Override
+            protected MailContent call() throws Exception {
+                deadline.check();
+                return inbox.loadContent(accountId, mailId, deadline);
+            }
+        };
+    }
+
+    public Task<Void> markReadTask(UUID accountId, UUID mailId) {
+        Deadline deadline = Deadline.after(AppConstants.OPEN_HEADER_BUDGET);
         return new Task<>() {
             @Override
             protected Void call() throws Exception {
-                mailSyncService.markAsRead(mail, label);
+                deadline.check();
+                inbox.markRead(accountId, mailId);
                 return null;
             }
         };

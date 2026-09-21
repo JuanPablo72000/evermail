@@ -1,67 +1,93 @@
+# Interfaz y navegación finales
+
+**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+
 ```mermaid
 classDiagram
+    class App {
+        +start(Stage stage) void
+        +stop() void
+    }
+    class AppContext {
+        +create() AppContext
+        +close() void
+    }
     class SceneNavigator {
-        <<Navigation>>
-        +navigateTo(String fxmlPath) void
-        +goToInbox() void
-        +goToLogin() void
-        +goToCompose() void
+        +showLoading() void
+        +showLogin() void
+        +showInbox(Account account) void
+        +showCompose(Account account) void
+        +showRecovery(ErrorCode code) void
     }
-
     class LoadingController {
-        <<Controller>>
         +initialize() void
+        +onRetryClick() void
     }
-
     class LoginController {
-        <<Controller>>
         +onGoogleLoginClick() void
         +onMicrosoftLoginClick() void
+        +onCancelLoginClick() void
     }
-
     class InboxController {
-        <<Controller>>
-        +initialize() void
-        +onMailItemClick(Mail mail) void
+        +initialize(Account account) void
+        +onLoadMoreClick() void
+        +onMailClick(UUID mailId) void
         +onComposeClick() void
-        +onDownloadAttachmentClick(Attachment attachment) void
+        +onLogoutClick() void
+        +onRetryClick() void
     }
-
     class ComposeController {
-        <<Controller>>
-        +initialize() void
+        +initialize(Account account) void
         +onSendClick() void
-        +onDiscardClick() void
+        +onCancelClick() void
     }
-
-    %% Dependencies toward facade
-    LoadingController --> AuthFacade : uses
-    LoginController --> AuthFacade : uses
-    InboxController --> MailFacade : uses
-    InboxController --> AttachmentFacade : uses
-    ComposeController --> ComposeFacade : uses
-
-    %% Dependencies toward SceneNavigator
-    LoadingController --> SceneNavigator : uses
-    LoginController --> SceneNavigator : uses
-    InboxController --> SceneNavigator : uses
-    ComposeController --> SceneNavigator : uses
+    App --> AppContext
+    App --> SceneNavigator
+    AppContext --> TaskRunner
+    AppContext --> TransactionManager
+    LoadingController --> StartupFacade
+    LoginController --> AuthFacade
+    InboxController --> MailFacade
+    InboxController --> AuthFacade
+    ComposeController --> ComposeFacade
+    LoadingController --> SceneNavigator
+    LoadingController --> TaskRunner
+    LoginController --> SceneNavigator
+    LoginController --> TaskRunner
+    InboxController --> SceneNavigator
+    InboxController --> TaskRunner
+    ComposeController --> SceneNavigator
+    ComposeController --> TaskRunner
 ```
 
-**Key syntax used here:**
-- `<<Controller>>`: Stereotype marking JavaFX classes bound 1:1 to an `.fxml` file, responsible only for UI events and for invoking the corresponding `facade`.
-- `<<Navigation>>`: Stereotype for `SceneNavigator`, a class that centralizes scene/screen changes, with no business logic.
-- `-->`: **Association/Usage.** The Controller holds an injected reference toward the referenced class.
-- `-`, `+`: Access modifiers (Private, Public).
+AppContext construye una sola instancia de infraestructura y colaboradores e inyecta controladores mediante FXMLLoader.controllerFactory. App.stop cierra tareas, transportes y conexión. SceneNavigator concentra rutas FXML; los controladores no acceden directamente a repositorios, protocolos ni secretos.
 
-**Design notes:**
+```mermaid
+stateDiagram-v2
+    [*] --> Carga
+    Carga --> Login : sin sesion o requiere autorizacion
+    Carga --> Bandeja : sesion disponible o cache offline
+    Carga --> Recuperacion : fallo local o presupuesto agotado
+    Recuperacion --> Carga : reintentar
+    Login --> Bandeja : OAuth completado
+    Login --> Login : cancelacion o error
+    Bandeja --> Componer : correo nuevo
+    Componer --> Bandeja : entrega registrada o cancelar antes de enviar
+    Componer --> Componer : rechazo o resultado incierto
+    Bandeja --> Login : logout completado
+```
 
-1. `SceneNavigator` is the only class shared among the 4 controllers: it centralizes `loadFXML`/JavaFX `Scene` switching, preventing each controller from repeating `.fxml` loading logic or handling hardcoded paths — if the view folder structure changes tomorrow, only this class needs to be modified.
+## Comportamiento requerido
 
-2. `LoadingController.initialize()` is the application's single entry point: it checks whether a saved session exists (via `AuthFacade`, internally reusing `refreshTokenIfNeeded` in `AuthService`) and automatically navigates to `Inbox` if the session is valid, or to `Login` if not — fulfilling the MVP's non-functional requirement of a loading screen that resolves connections before showing content to the user.
+- Carga tiene presupuesto de 5 s. Una espera que lo exceda cambia a recuperación con información explícita; no bloquea indefinidamente ni garantiza éxito ante un disco averiado.
+- Login utiliza el navegador del sistema; cancelar cierra el intento OAuth sin afectar otras cuentas.
+- Bandeja muestra inicialmente los 50 más recientes; pinta caché disponible y actualiza sin duplicar. Indica modo offline/caché antigua. Cargar más agrega otros 50 y conserva selección/posición; si no hay más se deshabilita.
+- El contenido se abre dentro de la bandeja en dos etapas: encabezado en 2 s y texto en otros 2. La vista es texto legible, sin WebView, ejecución HTML ni imágenes remotas.
+- Componer admite destinatarios y texto de un correo nuevo. Mantiene ComposeRequest en memoria; cancelar antes de enviar descarta esa edición. No hay pantalla de borradores.
+- Al enviar conserva submissionId y evita edición/repetición mientras el resultado está pendiente. Un resultado UNKNOWN informa que pudo entregarse y no ofrece reenvío automático. Tras rechazo definitivo, corregir/enviar crea una nueva solicitud explícita.
+- Cerrar una vista durante SMTP no implica cancelar un correo ya transmitido. El estado sigue registrado y se recupera conforme al UML de servicios.
+- Logout limpia selección/contenido y cancela resultados tardíos; si la limpieza local falla se muestra recuperación y la cuenta permanece DISCONNECTING.
 
-3. `InboxController` is the controller with the most responsibilities because, per the Figma flow, the "open mail" view (including its mixed HTML/plain-text content and its attachments) lives inside the same inbox screen, not in a separate controller. HTML body rendering is handled directly with a JavaFX `WebView` embedded in that view — it requires no additional method in `MimeUtil`, since `MimeUtil.extractPlainText()` (defined in `util`) already delivers the plain text, and `bodyHTML` already comes resolved from the `Mail` model to be passed as-is to the `WebView`.
+## Alcance y tiempos
 
-4. `onDownloadAttachmentClick()` in `InboxController` is the only place where `AttachmentFacade` is used — nothing is downloaded when opening a mail (on-demand download, already defined in `FileUtil`/`AttachmentService`), only when the user explicitly clicks on an attachment.
-
-5. No controller is aware of classes from `service`, `repository`, or `dao` — its only entry point into business logic is the corresponding `facade`, closing the full unidirectional dependency chain: `controller → facade → service → repository → dao`.
+No se añaden pantallas de enviados, etiquetas, contactos, respuestas ni adjuntos. Guardar enviados es persistencia interna. Los presupuestos vigentes son arranque 5 s, bandeja 5 s, lectura 2 + 2 s y envío 4 s. Son criterios a medir en un entorno de referencia, no una garantía sobre redes externas. La interfaz siempre debe distinguir éxito, espera, offline y error.

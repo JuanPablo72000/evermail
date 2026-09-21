@@ -1,156 +1,160 @@
 package com.juanpablo.evermail.repository;
 
-import com.juanpablo.evermail.dao.AttachmentDAO;
-import com.juanpablo.evermail.dao.MailAddressDAO;
-import com.juanpablo.evermail.dao.MailDAO;
-import com.juanpablo.evermail.dao.MailLabelDAO;
-import com.juanpablo.evermail.exception.CryptoException;
-import com.juanpablo.evermail.exception.DatabaseException;
-import com.juanpablo.evermail.model.Account;
-import com.juanpablo.evermail.model.Attachment;
-import com.juanpablo.evermail.model.Mail;
-import com.juanpablo.evermail.model.MailAddress;
+import com.juanpablo.evermail.dao.*;
+import com.juanpablo.evermail.exception.*;
+import com.juanpablo.evermail.model.*;
+import com.juanpablo.evermail.service.KeyStoreService;
 import com.juanpablo.evermail.util.SecurityUtil;
+import java.time.Instant;
+import java.util.*;
 
-import javax.crypto.SecretKey;
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Combines MailDAO, MailLabelDAO, MailAddressDAO, and AttachmentDAO into a
- * single domain-aggregate view of a Mail, and owns all encryption
- * orchestration around bodyPlainText/bodyHTML (see uml-dao.md, note 4).
- * <p>
- * Always uses {@code SecurityUtil.retrieveAesKey} — never generates a key —
- * since by the time any Mail is saved, its Account already exists and its
- * key was generated once in {@link AccountRepository#create}.
- */
 public class MailRepository {
+    private final TransactionManager transactions;
+    private final AccountRepository accounts;
+    private final SecurityUtil security;
+    private final KeyStoreService keys;
+    private final MailDAO mails = new MailDAO();
+    private final RecipientDAO recipients = new RecipientDAO();
+    private final InboxStateDAO states = new InboxStateDAO();
 
-    private final MailDAO mailDAO;
-    private final MailLabelDAO mailLabelDAO;
-    private final MailAddressDAO mailAddressDAO;
-    private final AttachmentDAO attachmentDAO;
-    private final SecurityUtil securityUtil;
-
-    public MailRepository(MailDAO mailDAO,
-                          MailLabelDAO mailLabelDAO,
-                          MailAddressDAO mailAddressDAO,
-                          AttachmentDAO attachmentDAO,
-                          SecurityUtil securityUtil) {
-        this.mailDAO = mailDAO;
-        this.mailLabelDAO = mailLabelDAO;
-        this.mailAddressDAO = mailAddressDAO;
-        this.attachmentDAO = attachmentDAO;
-        this.securityUtil = securityUtil;
+    public MailRepository(TransactionManager transactions, AccountRepository accounts, SecurityUtil security, KeyStoreService keys) {
+        this.transactions = transactions;
+        this.accounts = accounts;
+        this.security = security;
+        this.keys = keys;
     }
 
-    /**
-     * Returns the mail with bodyPlainText/bodyHTML already decrypted, or null
-     * if no mail exists with that id.
-     */
-    public Mail getById(int idMail) throws DatabaseException, CryptoException {
-        Mail mail = mailDAO.findById(idMail);
-        if (mail == null) {
+    public InboxPage readInbox(UUID accountId, InboxCursor cursor, int size) throws EvermailException {
+        accounts.require(accountId);
+        if (size < 1 || size > 50 || (cursor != null && !cursor.getAccountId().equals(accountId))) {
+            throw new MailFetchException(ErrorCode.CURSOR_INVALID, "Invalid page request");
+        }
+        return transactions.read(c -> {
+            InboxStateDAO.Row state = states.find(c, accountId);
+            if (state == null) {
+                if (cursor != null) {
+                    throw new MailFetchException(ErrorCode.CURSOR_INVALID, "Inbox generation is unavailable");
+                }
+                return new InboxPage(List.of(), null, true, true, true);
+            }
+            if (cursor != null && cursor.getUidValidity() != state.getValidity()) {
+                throw new MailFetchException(ErrorCode.CURSOR_INVALID, "Inbox generation changed");
+            }
+            long before = cursor == null ? Long.MAX_VALUE : cursor.getBeforeUid();
+            List<MailDAO.Row> rows = mails.page(c, accountId, state.getValidity(), before, state.getLower(), size + 1);
+            boolean localMore = rows.size() > size;
+            List<MailHeader> headers = rows.stream().limit(size).map(MailDAO.Row::getHeader).toList();
+            boolean hasMore = localMore || state.isHasMore();
+            long nextUid = headers.isEmpty() ? state.getLower() : headers.getLast().getRemoteId().getUid();
+            InboxCursor next = hasMore ? new InboxCursor(accountId, state.getValidity(), nextUid) : null;
+            boolean needsRemote = headers.size() < size && state.isHasMore();
+            boolean stale = Instant.now().toEpochMilli() - state.getSyncedAt() > 60_000;
+            return new InboxPage(headers, next, hasMore, stale, needsRemote);
+        });
+    }
+
+    public void saveInboxPage(UUID accountId, RemoteInboxPage page) throws EvermailException {
+        accounts.require(accountId);
+        if (page.getUidValidity() < 1 || page.getLowerUid() < 1 || page.getUpperUid() < page.getLowerUid()) {
+            throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Invalid remote page coverage");
+        }
+        transactions.write(c -> {
+            InboxStateDAO.Row old = states.find(c, accountId);
+            if (old != null && old.getValidity() != page.getUidValidity()) {
+                Sql.update(c, "DELETE FROM mail WHERE id_account=? AND direction='INBOX'", accountId);
+                old = null;
+            }
+            Set<Long> present = new HashSet<>();
+            for (RemoteMessage message : page.getMessages()) {
+                RemoteMailHeader h = message.getHeader();
+                long uid = h.getRemoteId().getUid();
+                if (h.getRemoteId().getUidValidity() != page.getUidValidity() || uid < page.getLowerUid() || uid > page.getUpperUid()) {
+                    throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Message lies outside inspected range");
+                }
+                present.add(uid);
+                MailDAO.Row existing = mails.findRemote(c, accountId, h.getRemoteId());
+                UUID id = existing == null ? UUID.randomUUID() : existing.getHeader().getId();
+                if (existing == null) {
+                    mails.insert(c, new MailDAO.Row(new MailHeader(id, accountId, MailDirection.INBOX,
+                            h.getRemoteId(), h.getMessageId(), null, h.getSenderEmail(), h.getSenderName(),
+                            h.getSubject() == null ? "" : h.getSubject(), h.getOccurredAt(), false, false), null));
+                } else {
+                    Sql.update(c, "UPDATE mail SET subject=?,sender_name=? WHERE id_mail=?",
+                            h.getSubject() == null ? "" : h.getSubject(), h.getSenderName(), id);
+                }
+                recipients.replace(c, id, message.getRecipients(), false);
+            }
+            List<MailDAO.Row> inspected = mails.page(c, accountId, page.getUidValidity(),
+                    page.getUpperUid() == Long.MAX_VALUE ? Long.MAX_VALUE : page.getUpperUid() + 1,
+                    page.getLowerUid(), Integer.MAX_VALUE);
+            for (MailDAO.Row row : inspected) {
+                if (!present.contains(row.getHeader().getRemoteId().getUid())) {
+                    Sql.update(c, "DELETE FROM mail WHERE id_mail=?", row.getHeader().getId());
+                }
+            }
+            long lower = page.getLowerUid();
+            long upper = page.getUpperUid();
+            boolean more = page.isHasMore();
+            if (old != null && lower <= old.getUpper() + 1 && upper >= old.getLower() - 1) {
+                lower = Math.min(lower, old.getLower());
+                upper = Math.max(upper, old.getUpper());
+                more = page.getLowerUid() <= old.getLower() ? page.isHasMore() : old.isHasMore();
+            }
+            states.save(c, accountId, new InboxStateDAO.Row(page.getUidValidity(), lower, upper, more, System.currentTimeMillis()));
+            return null;
+        });
+    }
+
+    public MailHeader findHeader(UUID accountId, UUID mailId) throws EvermailException {
+        accounts.require(accountId);
+        MailDAO.Row row = transactions.read(c -> mails.find(c, accountId, mailId));
+        if (row == null) {
+            throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Mail is unavailable");
+        }
+        return row.getHeader();
+    }
+
+    public MailContent readContent(UUID accountId, UUID mailId) throws EvermailException {
+        Account account = accounts.require(accountId);
+        MailDAO.Row row = transactions.read(c -> mails.find(c, accountId, mailId));
+        if (row == null) {
+            throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Mail is unavailable");
+        }
+        if (row.getBodyCipher() == null) {
             return null;
         }
-        SecretKey key = securityUtil.retrieveAesKey(String.valueOf(mail.getIdAccount()));
-        return decryptBody(mail, key);
+        String plain = security.decrypt(row.getBodyCipher(), keys.read(account.getKeyRef()),
+                new CryptoContext(accountId, mailId, "body"));
+        return new MailContent(mailId, plain, transactions.read(c -> recipients.find(c, mailId, false)));
     }
 
-    /**
-     * Returns the most recent mails for an account (already decrypted),
-     * newest first, capped at {@code limit}. The account's key is resolved
-     * once and reused across every mail in the result, since they all belong
-     * to the same account — a single keyring access instead of one per mail.
-     */
-    public List<Mail> getInbox(Account account, int limit) throws DatabaseException, CryptoException {
-        List<Mail> mails = mailDAO.findByAccount(account.getIdAccount(), limit);
-        SecretKey key = securityUtil.retrieveAesKey(String.valueOf(account.getIdAccount()));
-
-        List<Mail> decrypted = new ArrayList<>(mails.size());
-        for (Mail mail : mails) {
-            decrypted.add(decryptBody(mail, key));
-        }
-        return decrypted;
-    }
-
-    /**
-     * Persists a complete incoming mail as a single business operation: the
-     * Mail row itself (with bodyPlainText/bodyHTML encrypted), its recipients
-     * (Mail_Address), and its attachments' metadata, all sharing one
-     * already-resolved SecretKey (see uml-repositories.md, note 4).
-     * <p>
-     * {@code recipients} and {@code attachments} are not fields on the Mail
-     * model (a Mail row alone has no place to carry them), so they travel as
-     * separate parameters — mail.idMail is not required to be set beforehand,
-     * it is populated on every entry after the insert.
-     *
-     * @param recipients may be empty but not null.
-     * @param attachments may be empty or null (a mail with no attachments).
-     */
-    public Mail save(Mail mail, List<MailAddress> recipients, List<Attachment> attachments)
-            throws DatabaseException, CryptoException {
-
-        SecretKey key = securityUtil.retrieveAesKey(String.valueOf(mail.getIdAccount()));
-
-        String plainBodyText = mail.getBodyPlainText();
-        String plainBodyHtml = mail.getBodyHTML();
-
-        mail.setBodyPlainText(plainBodyText != null ? securityUtil.encrypt(plainBodyText, key) : null);
-        mail.setBodyHTML(plainBodyHtml != null ? securityUtil.encrypt(plainBodyHtml, key) : null);
-
-        int idMail = mailDAO.insert(mail);
-        mail.setIdMail(idMail);
-
-        mail.setBodyPlainText(plainBodyText);
-        mail.setBodyHTML(plainBodyHtml);
-
-        for (MailAddress recipient : recipients) {
-            recipient.setIdMail(idMail);
-        }
-        mailAddressDAO.insertBatch(recipients);
-
-        if (attachments != null) {
-            for (Attachment attachment : attachments) {
-                attachment.setIdMail(idMail);
-                int idAttachment = attachmentDAO.insert(attachment);
-                attachment.setIdAttachment(idAttachment);
+    public void saveContent(UUID accountId, UUID mailId, RemoteMailContent content) throws EvermailException {
+        Account account = accounts.require(accountId);
+        String encrypted = security.encrypt(content.getPlainText(), keys.read(account.getKeyRef()),
+                new CryptoContext(accountId, mailId, "body"));
+        transactions.write(c -> {
+            if (Sql.update(c, "UPDATE mail SET body_cipher=? WHERE id_account=? AND id_mail=?", encrypted, accountId, mailId) != 1) {
+                throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Mail disappeared during download");
             }
-        }
-
-        return mail;
+            recipients.replace(c, mailId, content.getRecipients(), false);
+            return null;
+        });
     }
 
-    /**
-     * Marks a mail read/unread under a specific label. isRead lives on
-     * Mail_Label (per the E-R model), not on Mail itself, so the same mail
-     * can be read under one label and unread under another.
-     */
-    public void markAsRead(int idMail, int idLabel, boolean isRead) throws DatabaseException {
-        mailLabelDAO.updateIsRead(idMail, idLabel, isRead);
+    public void markRead(UUID accountId, UUID mailId) throws EvermailException {
+        accounts.require(accountId);
+        transactions.write(c -> {
+            if (Sql.update(c, "UPDATE mail SET is_read=1 WHERE id_account=? AND id_mail=?", accountId, mailId) != 1) {
+                throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Mail is unavailable");
+            }
+            return null;
+        });
     }
 
-    /**
-     * Deletes the mail. The schema cascades this to its Mail_Label,
-     * Mail_Address, and Attachment rows (ON DELETE CASCADE), so no manual
-     * orchestration is needed here.
-     */
-    public void delete(int idMail) throws DatabaseException {
-        mailDAO.delete(idMail);
-    }
-
-    private Mail decryptBody(Mail mail, SecretKey key) throws CryptoException {
-        if (mail.getBodyPlainText() != null) {
-            mail.setBodyPlainText(securityUtil.decrypt(mail.getBodyPlainText(), key));
-        }
-        if (mail.getBodyHTML() != null) {
-            mail.setBodyHTML(securityUtil.decrypt(mail.getBodyHTML(), key));
-        }
-        return mail;
-    }
-
-    public void updateAttachmentPath(Attachment attachment) throws DatabaseException {
-        attachmentDAO.updateFilePath(attachment.getIdAttachment(), attachment.getFilePath());
+    public void remove(UUID accountId, UUID mailId) throws EvermailException {
+        transactions.write(c -> {
+            Sql.update(c, "DELETE FROM mail WHERE id_account=? AND id_mail=? AND direction='INBOX'", accountId, mailId);
+            return null;
+        });
     }
 }

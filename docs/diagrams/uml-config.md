@@ -1,43 +1,79 @@
+# Configuración final
+
+**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+
 ```mermaid
 classDiagram
+    class AppPolicy {
+        +int INBOX_PAGE_SIZE$
+        +Duration STARTUP_BUDGET$
+        +Duration INBOX_BUDGET$
+        +Duration OPEN_HEADER_BUDGET$
+        +Duration CONTENT_BUDGET$
+        +Duration SEND_BUDGET$
+        +Duration OAUTH_AUTHORIZATION_TIMEOUT$
+        +Duration TOKEN_REFRESH_MARGIN$
+        +int AES_KEY_BITS$
+    }
     class EnvConfig {
-        <<Config>>
-        -String googleClientId
-        -String googleClientSecret
-        -String microsoftClientId
-        -String microsoftClientSecret
-        +EnvConfig()
-        +getGoogleClientId() String
-        +getGoogleClientSecret() String
-        +getMicrosoftClientId() String
-        +getMicrosoftClientSecret() String
+        +loadProvider(OAuthProvider provider) ProviderConfig
     }
-    class AppConstants {
-        <<Config>>
-        +int MAX_EMAILS_DISPLAYED$
-        +long MAX_ATTACHMENT_SIZE_BYTES$
-        +int LOGIN_TIMEOUT_SECONDS$
-        +int INBOX_LOAD_TIMEOUT_SECONDS$
-        +int MAIL_OPEN_TIMEOUT_SECONDS$
-        +String DB_PATH$
-        +int AES_KEY_SIZE_BITS$
+    class ProviderConfig {
+        -String clientId
+        -String clientSecret
+        -URI authorizationEndpoint
+        -URI tokenEndpoint
+        -URI issuerDiscoveryEndpoint
+        -List~String~ scopes
+        -String imapHost
+        -int imapPort
+        -String smtpHost
+        -int smtpPort
+        -boolean publicClient
     }
-```    
-Key syntax used here:
-`<<Config>>`: Stereotype marking configuration classes with no domain identity of their own.
-`$`: Suffix denoting a static member (classifier) in Mermaid — used on every attribute of `AppConstants`.
-`-`, `+`: Access modifiers (Private, Public).
-Design notes:
-1. `EnvConfig` requires a constructor: upon instantiation, it loads the `.env` file once (via `dotenv-java`) and caches the values as private instance attributes. The `get...()` methods only return what is already loaded in memory, avoiding repeated disk reads — prioritizing low CPU/memory consumption.
+    class StorageConfig {
+        +databasePath() Path
+        +keyringServiceName() String
+    }
+    class ExecutionConfig {
+        +int ioWorkers
+        +int queueCapacity
+        +Duration databaseBusyTimeout
+    }
+    class Deadline {
+        +remaining() Duration
+        +throwIfExpired() void
+    }
+    class CancellationToken {
+        +isCancelled() boolean
+        +throwIfCancelled() void
+    }
+    EnvConfig --> ProviderConfig
+    ProviderConfig --> OAuthProvider
+    StorageConfig ..> Path
+    Deadline ..> AppPolicy
+```
 
-2. `AppConstants` has no constructor and is never instantiated: all of its members are `static final`, defined at compile time or resolved once at classloading, with no external dependencies.
+El sufijo $ indica constantes estáticas. Configuración validada e inmutable; no conserva contraseñas de correo. Java 21 se utiliza para ejecutar Gradle y la aplicación.
 
-3. `EnvConfig` is instantiated **exactly once** during application startup in `App.java` and **injected via constructor** into every collaborator that needs it (currently only `AuthService`). This closes the previously open "Singleton vs. manual injection" question in favor of injection: it keeps the dependency explicit in the constructor signature (a reviewer sees at a glance what `AuthService` depends on), makes `AuthService` unit-testable with a mock/fake `EnvConfig`, and is consistent with how `SqliteConnectionProvider` and the DAOs are already injected throughout the architecture. The `.env` file is still read only once per application lifecycle, because `App.java` creates `EnvConfig` a single time and reuses that instance. `EnvConfig` itself is unchanged from the implemented version — its no-arg constructor still loads the `.env` file internally.
+| Política | Valor |
+|---|---|
+| INBOX_PAGE_SIZE | 50 |
+| STARTUP_BUDGET | 5 s |
+| INBOX_BUDGET | 5 s por operación de carga/refresco |
+| OPEN_HEADER_BUDGET | 2 s |
+| CONTENT_BUDGET | 2 s adicionales |
+| SEND_BUDGET | 4 s |
+| OAUTH_AUTHORIZATION_TIMEOUT | 3 min, cancelable |
+| TOKEN_REFRESH_MARGIN | 60 s |
+| AES_KEY_BITS | 256 |
 
-4. The values in `AppConstants` come directly from the non-functional requirements already defined in `MVP_Evermail.md` (login, inbox, and mail-open loading times) and from the limits used by `FileUtil.validateSize` in the `util` package.
+Los presupuestos son end-to-end e incluyen espera en cola. HTTP/IMAP/SMTP usan timeouts de conexión, lectura y escritura acotados al plazo restante y un mecanismo de cierre al vencer. No se reinicia el plazo en cada reintento.
 
-5. `DB_PATH` is consumed by `SqliteConnectionProvider` (`repository` package) to open the single shared SQLite connection at startup. For the Windows-only prototype it resolves to `System.getenv("APPDATA") + "\\Evermail\\evermail.db"` — an absolute, OS-appropriate path, not a hardcoded relative literal. Multiplatform detection (macOS/Linux) is deferred as a documented TODO: adding untested branches for platforms not available during development is worse than adding them later, validated, when that work is actually undertaken.
+EnvConfig carga variables del entorno y un .env opcional; valida solo el proveedor solicitado. Google utiliza el tipo de cliente de escritorio configurado y su secreto si el registro lo requiere. Microsoft utiliza cliente público, sin MICROSOFT_CLIENT_SECRET. Los endpoints y redirect loopback deben corresponder al registro real; se usa descubrimiento OIDC oficial para validar identidad y claves.
 
-6. `DB_POOL_SIZE` was removed. It was originally added assuming `SqliteConnectionProvider` would manage a pool of several connections, the way a client-server database (Postgres, MySQL) would. That assumption doesn't hold for SQLite: the file allows only one writer at a time regardless of how many connections are open, so a multi-connection pool would not provide the expected parallelism — it would only add contention. The implemented design uses a single shared `Connection`, with concurrent access from multiple `Task` threads serialized via `synchronized` blocks in each DAO (see `uml-dao.md`, note 7). If a future profiling pass shows this serialization is a real bottleneck, the next step to consider is WAL mode with a dedicated read-only connection — not a naive connection pool.
+StorageConfig crea una ruta absoluta local en %APPDATA%/Evermail en Windows, fuera de la carpeta de trabajo. Si no puede resolver o escribir la ruta falla explícitamente. Windows es el entorno de referencia del MVP; otros sistemas requieren un adaptador validado.
 
-7. Security update: `AES_KEY_SIZE_BITS` centralizes the AES key size used by `SecurityUtil` for token, mail-body, and attachment encryption (see `uml-util.md`). Keeping this value here, rather than hardcoding `256` directly inside `SecurityUtil.generateAesKey()`, follows the same reasoning as note 5: any fixed cryptographic parameter that is not itself a secret belongs in static configuration.
+ExecutionConfig define ejecutores acotados y un busy_timeout menor que el presupuesto local restante. No existe un pool SQLite ni DB_POOL_SIZE. Los tamaños de ejecutor se validan con mediciones, no se confunden con límites de rendimiento.
+
+AppContext crea e inyecta configuración una vez. Los valores sensibles se excluyen de logs y diagnósticos.

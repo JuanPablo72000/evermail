@@ -1,99 +1,109 @@
+# Errores y resultados finales
+
+**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+
 ```mermaid
 classDiagram
     class ErrorCode {
-        <<Enumeration>>
-        OAUTH_TOKEN_EXPIRED
+        <<enumeration>>
+        CONFIG_INVALID
+        LOCAL_TIMEOUT
+        NETWORK_TIMEOUT
+        CANCELLED
         OAUTH_CONNECTION_FAILED
         OAUTH_INVALID_CREDENTIALS
-        SMTP_CONNECTION_FAILED
-        SMTP_SEND_REJECTED
+        OAUTH_TIMEOUT
+        OAUTH_STATE_MISMATCH
+        OAUTH_TOKEN_INVALID
+        OAUTH_REFRESH_FAILED
+        OAUTH_BROWSER_UNAVAILABLE
+        REAUTH_REQUIRED
         IMAP_CONNECTION_FAILED
-        IMAP_FOLDER_NOT_FOUND
         IMAP_FETCH_FAILED
+        MAIL_NOT_FOUND
+        CURSOR_INVALID
+        SMTP_REJECTED
+        DELIVERY_UNKNOWN
+        LOCAL_SAVE_PENDING
         DB_CONNECTION_FAILED
         DB_QUERY_FAILED
-        ATTACHMENT_NOT_FOUND
-        ATTACHMENT_TOO_LARGE
+        DB_MIGRATION_FAILED
         CRYPTO_OPERATION_FAILED
+        KEY_NOT_FOUND
+        SESSION_UNAVAILABLE
+        IDEMPOTENCY_CONFLICT
+        INVALID_RECIPIENT
     }
-
     class EvermailException {
-        <<Abstract>>
-        -ErrorCode errorCode
-        +getErrorCode() ErrorCode
+        <<abstract>>
+        -ErrorCode code
+        -boolean retryable
+        +getCode() ErrorCode
+        +isRetryable() boolean
     }
+    class ConfigurationException {
 
-    class EvermailRuntimeException {
-        <<Abstract>>
-        -String fieldName
-        +getFieldName() String
     }
-
     class OAuthAuthenticationException {
-        <<Leaf>>
-    }
 
-    class MailSendException {
-        <<Leaf>>
     }
-
     class MailFetchException {
-        <<Leaf>>
-    }
 
+    }
+    class MailSendException {
+
+    }
     class DatabaseException {
-        <<Leaf>>
-    }
 
-    class AttachmentException {
-        <<Leaf>>
     }
-
     class CryptoException {
-        <<Leaf>>
-    }
 
-    class InvalidFieldException {
-        <<Leaf>>
     }
+    class SessionException {
 
-    class InvalidEmailAddressException {
-        <<Leaf>>
     }
+    class ValidationException {
 
-    class EmptyFieldException {
-        <<Leaf>>
     }
-
-%% Checked branch inheritance
+    class SendResult {
+        -UUID submissionId
+        -DeliveryState state
+        -ErrorCode error
+    }
+    Exception <|-- EvermailException
+    EvermailException <|-- ConfigurationException
     EvermailException <|-- OAuthAuthenticationException
-    EvermailException <|-- MailSendException
     EvermailException <|-- MailFetchException
+    EvermailException <|-- MailSendException
     EvermailException <|-- DatabaseException
-    EvermailException <|-- AttachmentException
     EvermailException <|-- CryptoException
-    EvermailException ..> ErrorCode : uses
-
-%% Unchecked branch inheritance
-    EvermailRuntimeException <|-- InvalidFieldException
-    InvalidFieldException <|-- InvalidEmailAddressException
-    InvalidFieldException <|-- EmptyFieldException
+    EvermailException <|-- SessionException
+    EvermailException <|-- ValidationException
+    EvermailException --> ErrorCode
+    SendResult --> ErrorCode
+    SendResult --> DeliveryState
 ```
 
-**Design notes:**
+## Política de errores
 
-1. `EvermailException` extends `Exception` (checked) and `EvermailRuntimeException` extends `RuntimeException` (unchecked) — standard Java classes, not drawn as their own nodes.
+Los constructores conservan código, causa y posibilidad de reintento. Los mensajes públicos se generan a partir del código; no contienen tokens, cuerpos, credenciales, respuestas OAuth completas ni rutas privadas. Los errores de validación son recuperables por el usuario y usan ValidationException; no hay una segunda jerarquía de errores de negocio no comprobados.
 
-2. **All leaf classes declare their own 4 standard constructors manually** (no-arg-equivalent, message, cause, message+cause), each one delegating to the corresponding `super(...)` constructor in their parent class. Lombok's `@StandardException` annotation is **not used** here: it generates constructors that call a parameterless `super()`, which does not exist in `EvermailException` or `EvermailRuntimeException` — both require `errorCode`/`fieldName` as a mandatory first argument on every constructor. Writing these 4 constructors by hand is therefore required for the project to compile, and is reflected in this diagram by the `<<Leaf>>` stereotype instead of `<<@StandardException>>`.
+| Situación | Tratamiento |
+|---|---|
+| Red no disponible | Mostrar caché con estado offline; no borrar sesión ni correos. |
+| Credenciales rechazadas | REAUTH_REQUIRED; conservar caché y clave para reautorizar. |
+| Token renovado sin refresh_token nuevo | Conservar refresh_token anterior de la misma identidad. |
+| Cursor de otra cuenta/generación | CURSOR_INVALID; refrescar, no mezclar páginas. |
+| Cuerpo aún no descargado | Ausencia explícita en repositorio; obtener remoto. No es MAIL_NOT_FOUND. |
+| Mensaje remoto eliminado | MAIL_NOT_FOUND y reconciliación de caché. |
+| Fallo SQL | Rollback completo de la unidad de trabajo. |
+| Migración fallida | Recuperación; no ejecutar consultas sobre esquema incompleto. |
+| Clave ausente/cifrado inválido | KEY_NOT_FOUND/CRYPTO_OPERATION_FAILED; nunca generar reemplazo silencioso. |
+| SMTP rechazó sin entrega | FAILED con SMTP_REJECTED; el usuario puede corregir y crear otro intento. |
+| SMTP ambiguo o aceptación parcial | UNKNOWN con DELIVERY_UNKNOWN; no reenvío automático. |
+| SMTP aceptado, falta registro local | LOCAL_SAVE_PENDING; conservar intento y recuperar sin repetir SMTP. |
+| Repetición de submissionId con contenido distinto | IDEMPOTENCY_CONFLICT antes de conectar. |
 
-3. `errorCode` lives in the base class `EvermailException` and is inherited by all checked exceptions (OAuth, sending, fetching, database, attachments). Every checked leaf constructor requires an `ErrorCode` as its first parameter.
+Timeout/cancelación durante SMTP no demuestra ausencia de entrega. MailSendService devuelve SendResult cuando conoce el estado del intento; una excepción aislada no autoriza reenviar. Cancelar tareas de lectura sí permite reintento, mientras se valide cuenta y cursor.
 
-4. `fieldName` lives in `EvermailRuntimeException`, for the field-validation branch (`InvalidFieldException` and its children). It does not use `ErrorCode` because it represents internal business/validation logic, not an external protocol error — it is documented via comments/javadoc in the class instead.
-
-5. `ErrorCode` is a single, general-purpose enum (not one per exception) to keep the code simple, grouping codes by prefix: `OAUTH_`, `SMTP_`, `IMAP_`, `DB_`, `ATTACHMENT_`, `CRYPTO_`.
-
-5b. **`CryptoException`** covers every failure from `SecurityUtil` — AES-256-GCM encrypt/decrypt failures and OS-native keyring (Windows Credential Manager / macOS Keychain / Linux Secret Service) access failures — under the single `CRYPTO_OPERATION_FAILED` code. It is deliberately **not** reused from `OAuthAuthenticationException` or folded into `DatabaseException`: a local encryption/keyring failure is neither an OAuth handshake problem nor a SQLite problem, and conflating it with either would make a `service` misreact (e.g. treating a keyring failure as "the user's session is invalid" instead of "the local secret store is unavailable").
-
-6. `InvalidEmailAddressException` and `EmptyFieldException` extend `InvalidFieldException` rather than `EvermailRuntimeException` directly — their constructors delegate to `InvalidFieldException`'s constructors, which in turn delegate to `EvermailRuntimeException`'s, so `fieldName` propagates correctly through the full chain.
-
-7. Lombok is still used across this package where compatible (e.g. `@Getter` on `EvermailException`/`EvermailRuntimeException` to generate `getErrorCode()`/`getFieldName()`), reducing boilerplate wherever the constructor requirement does not conflict with `@StandardException`'s assumptions.
+Las fachadas transportan errores en Task.exception y los resultados de envío en Task.value. Los controladores muestran acciones coherentes con retryable y el estado de entrega; retryable nunca significa reintentar automáticamente un envío.

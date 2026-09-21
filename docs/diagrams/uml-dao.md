@@ -1,140 +1,84 @@
+# Persistencia y transacciones finales
+
+**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+
 ```mermaid
 classDiagram
     class SqliteConnectionProvider {
-        <<Repository>>
-        +SqliteConnectionProvider()
-        +getConnection() Connection
+        +open() Connection
+        +close() void
     }
-
+    class TransactionManager {
+        +read(DbWork work) Object
+        +write(DbWork work) Object
+        +close() void
+    }
+    class DatabaseMigrator {
+        +migrate() void
+    }
     class AccountDAO {
-        <<DAO>>
-        +findById(int idAccount) Account
-        +findAll() List~Account~
-        +insert(Account account) int
-        +update(Account account) void
-        +delete(int idAccount) void
+        +find(Connection tx, UUID id) AccountRow
+        +findByIdentity(Connection tx, OAuthProvider provider, String subject) AccountRow
+        +list(Connection tx) List~AccountRow~
+        +insert(Connection tx, AccountRow row) void
+        +update(Connection tx, AccountRow row) void
+        +delete(Connection tx, UUID id) void
     }
-
-    class AppProfileDAO {
-        <<DAO>>
-        +findById(int idProfile) AppProfile
-        +insert(AppProfile profile) int
-        +update(AppProfile profile) void
-        +delete(int idProfile) void
-    }
-
-    class EmailAddressDAO {
-        <<DAO>>
-        +findById(int idAddress) EmailAddress
-        +findByEmail(String email) EmailAddress
-        +insert(EmailAddress address) int
-        +delete(int idAddress) void
-        +findById(int idAddress) EmailAddress
-    }
-
     class MailDAO {
-        <<DAO>>
-        +findById(int idMail) Mail
-        +findByAccount(int idAccount, int limit) List~Mail~
-        +insert(Mail mail) int
-        +delete(int idMail) void
+        +find(Connection tx, UUID accountId, UUID mailId) MailRow
+        +findInboxPage(Connection tx, UUID accountId, InboxCursor cursor, int limit) List~MailRow~
+        +upsertIncoming(Connection tx, MailRow row) void
+        +insertSent(Connection tx, MailRow row) void
+        +updateBody(Connection tx, UUID accountId, UUID mailId, String cipher) void
+        +markRead(Connection tx, UUID accountId, UUID mailId) void
+        +deleteMissing(Connection tx, UUID accountId, RemoteUidRange range) void
+        +invalidateInbox(Connection tx, UUID accountId) void
     }
-
-    class AttachmentDAO {
-        <<DAO>>
-        +findByMail(int idMail) List~Attachment~
-        +insert(Attachment attachment) int
-        +delete(int idAttachment) void
+    class MailRecipientDAO {
+        +find(Connection tx, UUID mailId) List~RecipientRow~
+        +replace(Connection tx, UUID mailId, List~RecipientRow~ rows) void
     }
-
-    class LabelDAO {
-        <<DAO>>
-        +findById(int idLabel) Label
-        +findByAccount(int idAccount) List~Label~
-        +insert(Label label) int
-        +delete(int idLabel) void
+    class InboxStateDAO {
+        +find(Connection tx, UUID accountId) InboxStateRow
+        +save(Connection tx, InboxStateRow row) void
     }
-
-    class MailLabelDAO {
-        <<DAO>>
-        +findByMail(int idMail) List~MailLabel~
-        +insert(MailLabel mailLabel) void
-        +updateIsRead(int idMail, int idLabel, boolean isRead) void
-        +delete(int idMail, int idLabel) void
+    class OutboxDAO {
+        +find(Connection tx, UUID accountId, UUID id) OutboxRow
+        +insert(Connection tx, OutboxRow row) void
+        +transition(Connection tx, UUID accountId, UUID id, DeliveryState expected, DeliveryState next) boolean
+        +findRecoverable(Connection tx, UUID accountId) List~OutboxRow~
     }
-
-    class MailAddressDAO {
-        <<DAO>>
-        +findByMail(int idMail) List~MailAddress~
-        +insertBatch(List~MailAddress~ addresses) void
-        +delete(int idMail) void
+    class OutboxRecipientDAO {
+        +find(Connection tx, UUID outboxId) List~RecipientRow~
+        +insert(Connection tx, UUID outboxId, List~RecipientRow~ rows) void
     }
-
-    class DraftDAO {
-        <<DAO>>
-        +findById(int idDraft) Draft
-        +findByAccount(int idAccount) List~Draft~
-        +insert(Draft draft) int
-        +update(Draft draft) void
-        +delete(int idDraft) void
-    }
-
-    class DraftAddressDAO {
-        <<DAO>>
-        +findByDraft(int idDraft) List~DraftAddress~
-        +insertBatch(List~DraftAddress~ addresses) void
-        +delete(int idDraft) void
-    }
-
-%% Shared dependency towards the connection
-    AccountDAO --> SqliteConnectionProvider : uses
-    AppProfileDAO --> SqliteConnectionProvider : uses
-    EmailAddressDAO --> SqliteConnectionProvider : uses
-    MailDAO --> SqliteConnectionProvider : uses
-    AttachmentDAO --> SqliteConnectionProvider : uses
-    LabelDAO --> SqliteConnectionProvider : uses
-    MailLabelDAO --> SqliteConnectionProvider : uses
-    MailAddressDAO --> SqliteConnectionProvider : uses
-    DraftDAO --> SqliteConnectionProvider : uses
-    DraftAddressDAO --> SqliteConnectionProvider : uses
-
-%% Dependencies towards config
-    SqliteConnectionProvider --> AppConstants : uses
-
-%% Dependencies towards exception (throws)
-    AccountDAO ..> DatabaseException : throws
-    AppProfileDAO ..> DatabaseException : throws
-    EmailAddressDAO ..> DatabaseException : throws
-    MailDAO ..> DatabaseException : throws
-    AttachmentDAO ..> DatabaseException : throws
-    LabelDAO ..> DatabaseException : throws
-    MailLabelDAO ..> DatabaseException : throws
-    MailAddressDAO ..> DatabaseException : throws
-    DraftDAO ..> DatabaseException : throws
-    DraftAddressDAO ..> DatabaseException : throws
+    TransactionManager --> SqliteConnectionProvider
+    DatabaseMigrator --> TransactionManager
+    AccountDAO ..> Connection : transaccion recibida
+    MailDAO ..> Connection : transaccion recibida
+    MailRecipientDAO ..> Connection : transaccion recibida
+    InboxStateDAO ..> Connection : transaccion recibida
+    OutboxDAO ..> Connection : transaccion recibida
+    OutboxRecipientDAO ..> Connection : transaccion recibida
 ```
 
-**Key syntax used here:**
-- `<<DAO>>`: Stereotype marking classes with direct access to a physical SQLite table, with no domain logic.
-- `<<Repository>>`: Stereotype reused here for `SqliteConnectionProvider`, since it manages a live resource (connection pool), just like `MailSessionProvider` in `service`.
-- `-->`: **Association/Usage.** The origin class holds an injected reference to the target class.
-- `..>`: **Dependency.** The origin class throws the referenced exception.
-- `-`, `+`: Access modifiers (Private, Public).
+## Unidad de trabajo
 
-**Design notes:**
+DbWork<T> es una función que recibe Connection y devuelve T; Object en el dibujo abrevia el retorno genérico T de read/write. Los tipos Row representan exactamente las columnas del [ER](er-diagram.md), sin descifrar tokens o cuerpos. RemoteUidRange contiene UIDVALIDITY, límites del intervalo y UID presentes confirmados por IMAP.
 
-1. `SqliteConnectionProvider` centralizes opening and reusing SQLite connections (pool), initializing `DB_PATH` from `AppConstants` a single time. All DAOs receive it injected via constructor, replicating the same pattern already used with `MailSessionProvider` in `service` — this prevents each DAO from opening its own connection and reduces resource consumption.
+TransactionManager posee una única conexión con acceso serializado; ninguna capa externa la usa simultáneamente. read y write ejecutan bloques cortos; write confirma todo o revierte todo. Los DAO no hacen commit, rollback, close ni cambios de autoCommit. Las operaciones SMTP, IMAP, OAuth2 y keyring se realizan fuera de la transacción.
 
-2. Each DAO corresponds exactly to one physical table from the E-R model, including junction tables (`MailLabelDAO`, `MailAddressDAO`, `DraftAddressDAO`), which expose batch methods (`insertBatch`) to minimize round-trips to the database when several related rows are saved at once (e.g. multiple recipients of the same mail).
+SqliteConnectionProvider abre la base, activa foreign_keys y un busy_timeout acotado. No existe DB_POOL_SIZE. Los métodos DAO parametrizan valores SQL y comprueban filas afectadas. AccountDAO usa la misma coordinación que los demás.
 
-3. `MailLabelDAO.updateIsRead()` exists as its own method (instead of a generic `update()`) because, according to the E-R model, `isRead` is the only mutable field of that junction table — this optimizes the most common operation (marking read/unread) into a single targeted SQL statement, without needing to rebuild the entire row.
+## Integridad
 
-4. **`MailDAO`, `AttachmentDAO`, and `DraftDAO` never receive nor touch a `SecretKey`.** They are pure CRUD: every field that is encrypted at rest (`bodyPlainText`, `bodyHTML` on `Mail`/`Draft`; the file content on `Attachment`) arrives at the DAO **already encrypted as a plain `String`** (or, for `Attachment`, is not even DAO-managed — see note 4b), and is written/read as-is, with no cryptographic parameter in the method signature. Resolving the `SecretKey` (via `SecurityUtil.retrieveAesKey(idAccount)`) and calling `encrypt`/`decrypt` around each DAO call is the exclusive responsibility of the `repository` layer, done once per business operation and reused across every DAO it orchestrates — this avoids redundant OS keyring accesses in batch flows such as inbox synchronization, and keeps every DAO trivially unit-testable without a `SecurityUtil` mock.
+- Cada consulta de MailRow incluye todos sus campos, también sender_name; no hay lectura de columnas omitidas.
+- upsertIncoming usa la clave única de UID del ER y conserva cuerpo y lectura local ya existentes al actualizar metadatos.
+- El guardado de una página, sus destinatarios y su cobertura inbox_state comparten transacción.
+- insertSent, destinatarios y transición ACCEPTED → RECORDED comparten transacción. outbound_id único hace idempotente repetir esa operación.
+- transition usa comparación de estado esperado; solo un trabajador puede cambiar PENDING → SENDING.
+- findInboxPage aplica cuenta, direction=INBOX, UIDVALIDITY y remote_uid < beforeUid, ORDER BY remote_uid DESC; sin OFFSET.
+- DatabaseMigrator aplica versiones consecutivas antes de habilitar repositorios. Un fallo revierte esa migración y presenta recuperación, no continúa con un esquema parcial. PRAGMA user_version registra la versión.
+- Se migran datos legados explícitamente; nunca se ejecuta un borrado general para resolver incompatibilidades.
 
-4b. `AttachmentDAO` only persists metadata (`fileName`, `mimeType`, `sizeBytes`, `filePath`) — the encrypted binary content lives on disk (`%APPDATA%\Evermail\attachments\{accountId}\`), written by `FileUtil.downloadAttachment()` in the `service` layer, not through this DAO at all. That's a second, independent reason `AttachmentDAO.insert()` carries no `SecretKey`.
-
-5. All DAOs still throw only `DatabaseException` (with its corresponding `ErrorCode`, e.g. `DB_QUERY_FAILED`) — since no DAO calls `SecurityUtil`, none of them need to translate a cryptographic failure into a `DatabaseException` either; that responsibility now sits entirely with whichever `repository` method performed the `encrypt`/`decrypt` call.
-
-6. No DAO is aware of any other DAO nor of the `repository` package that consumes it — that orchestration lives exclusively in the `Repository` layer, shown in a separate diagram (`uml-repositories.md`) to keep both diagrams readable.
-
-7. `EmailAddressDAO.findById()` was added so `AccountRepository.getEmailOfAccount()` can resolve the account's own address by `id_address` (it follows the same `synchronized (connectionProvider)` + `mapRow` pattern as `findByEmail`).
+Los errores SQL se traducen a DatabaseException preservando una causa técnica sin incluir datos sensibles.

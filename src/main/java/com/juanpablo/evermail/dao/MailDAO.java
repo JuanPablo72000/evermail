@@ -1,162 +1,52 @@
 package com.juanpablo.evermail.dao;
 
-import com.juanpablo.evermail.exception.DatabaseException;
-import com.juanpablo.evermail.exception.ErrorCode;
-import com.juanpablo.evermail.model.Mail;
-import com.juanpablo.evermail.repository.SqliteConnectionProvider;
+import com.juanpablo.evermail.model.*;
+import lombok.Value;
+import java.sql.*;
+import java.time.Instant;
+import java.util.*;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.sql.Types;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-
-/**
- * Pure CRUD over the mail table. bodyPlainText/bodyHTML are received and
- * returned exactly as stored — already encrypted as opaque Strings. This
- * class never touches SecurityUtil nor a SecretKey; that orchestration
- * lives exclusively in MailRepository.
- */
 public class MailDAO {
-
-    private final SqliteConnectionProvider connectionProvider;
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
-
-    public MailDAO(SqliteConnectionProvider connectionProvider) {
-        this.connectionProvider = connectionProvider;
+    @Value
+    public static class Row {
+        MailHeader header;
+        @lombok.ToString.Exclude
+        String bodyCipher;
     }
 
-    public Mail findById(int idMail) throws DatabaseException {
-        String sql = "SELECT id_mail, id_account, id_sender_address, id_reply_to_mail, server_message_id, "
-                + "subject, body_plain_text, body_html, date_received FROM mail WHERE id_mail = ?";
-
-        synchronized (connectionProvider) {
-            Connection connection = connectionProvider.getConnection();
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setInt(1, idMail);
-                try (ResultSet resultSet = statement.executeQuery()) {
-                    if (!resultSet.next()) {
-                        return null;
-                    }
-                    return mapRow(resultSet);
-                }
-            } catch (SQLException e) {
-                throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, e);
-            }
-        }
+    public Row find(Connection c, UUID accountId, UUID id) throws SQLException {
+        return Sql.one(c, "SELECT * FROM mail WHERE id_account=? AND id_mail=?", this::map, accountId, id);
     }
 
-    /**
-     * Returns the most recent mails for an account, newest first, capped at
-     * {@code limit} — used to satisfy the "last 50 received/sent emails"
-     * requirement without loading the entire history into memory.
-     */
-    public List<Mail> findByAccount(int idAccount, int limit) throws DatabaseException {
-        String sql = "SELECT id_mail, id_account, id_sender_address, id_reply_to_mail, server_message_id, "
-                + "subject, body_plain_text, body_html, date_received FROM mail "
-                + "WHERE id_account = ? ORDER BY date_received DESC LIMIT ?";
-
-        synchronized (connectionProvider) {
-            Connection connection = connectionProvider.getConnection();
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setInt(1, idAccount);
-                statement.setInt(2, limit);
-                try (ResultSet resultSet = statement.executeQuery()) {
-                    List<Mail> mails = new ArrayList<>();
-                    while (resultSet.next()) {
-                        mails.add(mapRow(resultSet));
-                    }
-                    return mails;
-                }
-            } catch (SQLException e) {
-                throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, e);
-            }
-        }
+    public Row findRemote(Connection c, UUID accountId, RemoteMailId remote) throws SQLException {
+        return Sql.one(c, "SELECT * FROM mail WHERE id_account=? AND direction='INBOX' AND uid_validity=? AND remote_uid=?",
+                this::map, accountId, remote.getUidValidity(), remote.getUid());
     }
 
-    public int insert(Mail mail) throws DatabaseException {
-        String sql = """
-            INSERT INTO mail (id_account, id_sender_address, id_reply_to_mail, server_message_id,
-                              subject, body_plain_text, body_html, date_received, sender_display_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
-
-        synchronized (connectionProvider) {
-            Connection connection = connectionProvider.getConnection();
-            try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                statement.setInt(1, mail.getIdAccount());
-                statement.setInt(2, mail.getIdSenderAddress());
-                if (mail.getIdReplyToMail() != null) {
-                    statement.setInt(3, mail.getIdReplyToMail());
-                } else {
-                    statement.setNull(3, Types.INTEGER);
-                }
-                statement.setString(4, mail.getServerMessageId());
-                statement.setString(5, mail.getSubject());
-                statement.setString(6, mail.getBodyPlainText());
-                statement.setString(7, mail.getBodyHTML());
-                statement.setString(8, mail.getDateReceived().format(DATE_FORMAT));
-                statement.setString(9, mail.getSenderDisplayName());
-
-                statement.executeUpdate();
-
-                try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
-                    if (generatedKeys.next()) {
-                        return generatedKeys.getInt(1);
-                    }
-                    throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "No se generó un id_mail al insertar.");
-                }
-            } catch (SQLException e) {
-                throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, e);
-            }
-        }
+    public List<Row> page(Connection c, UUID accountId, long validity, long before, long lower, int size) throws SQLException {
+        return Sql.list(c, """
+                SELECT * FROM mail WHERE id_account=? AND direction='INBOX' AND uid_validity=?
+                AND remote_uid<? AND remote_uid>=? ORDER BY remote_uid DESC LIMIT ?
+                """, this::map, accountId, validity, before, lower, size);
     }
 
-    public void delete(int idMail) throws DatabaseException {
-        String sql = "DELETE FROM mail WHERE id_mail = ?";
-
-        synchronized (connectionProvider) {
-            Connection connection = connectionProvider.getConnection();
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setInt(1, idMail);
-                statement.executeUpdate();
-            } catch (SQLException e) {
-                throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, e);
-            }
-        }
+    public void insert(Connection c, Row row) throws SQLException {
+        MailHeader h = row.getHeader();
+        Sql.update(c, "INSERT INTO mail VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", h.getId(), h.getAccountId(), h.getDirection(),
+                h.getRemoteId() == null ? null : h.getRemoteId().getUid(),
+                h.getRemoteId() == null ? null : h.getRemoteId().getUidValidity(),
+                h.getMessageId(), h.getOutboundId(), h.getSenderEmail(), h.getSenderName(),
+                h.getSubject(), h.getOccurredAt(), row.getBodyCipher(), h.isRead() ? 1 : 0);
     }
 
-    private void setNullableInt(PreparedStatement statement, int index, Integer value) throws SQLException {
-        if (value == null) {
-            statement.setNull(index, Types.INTEGER);
-        } else {
-            statement.setInt(index, value);
-        }
-    }
-
-    private Mail mapRow(ResultSet resultSet) throws SQLException {
-        Mail mail = new Mail();
-        mail.setIdMail(resultSet.getInt("id_mail"));
-        mail.setIdAccount(resultSet.getInt("id_account"));
-        mail.setIdSenderAddress(resultSet.getInt("id_sender_address"));
-
-        int replyTo = resultSet.getInt("id_reply_to_mail");
-        mail.setIdReplyToMail(resultSet.wasNull() ? null : replyTo);
-
-        mail.setServerMessageId(resultSet.getString("server_message_id"));
-        mail.setSubject(resultSet.getString("subject"));
-        mail.setBodyPlainText(resultSet.getString("body_plain_text"));
-        mail.setBodyHTML(resultSet.getString("body_html"));
-        mail.setDateReceived(LocalDate.parse(resultSet.getString("date_received"), DATE_FORMAT));
-        mail.setSenderDisplayName(resultSet.getString("sender_display_name"));
-
-        return mail;
+    private Row map(ResultSet rs) throws SQLException {
+        MailDirection direction = MailDirection.valueOf(rs.getString("direction"));
+        String outbound = rs.getString("outbound_id");
+        String body = rs.getString("body_cipher");
+        return new Row(new MailHeader(UUID.fromString(rs.getString("id_mail")), UUID.fromString(rs.getString("id_account")),
+                direction, direction == MailDirection.INBOX ? new RemoteMailId(rs.getLong("uid_validity"), rs.getLong("remote_uid")) : null,
+                rs.getString("message_id"), outbound == null ? null : UUID.fromString(outbound),
+                rs.getString("sender_email"), rs.getString("sender_name"), rs.getString("subject"),
+                Instant.ofEpochMilli(rs.getLong("occurred_at")), rs.getInt("is_read") == 1, body != null), body);
     }
 }
