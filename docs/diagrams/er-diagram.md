@@ -36,7 +36,8 @@ erDiagram
         TEXT sender_name
         TEXT subject
         INTEGER occurred_at "Epoch UTC en milisegundos"
-        TEXT body_cipher "Texto legible cifrado, carga diferida"
+        TEXT body_cipher "Texto o sobre híbrido cifrado, carga diferida"
+        INTEGER body_format "0 texto anterior, 1 sobre HTML/texto"
         INTEGER is_read "Booleano 0 o 1"
     }
     mail_recipient {
@@ -76,7 +77,7 @@ erDiagram
 - Todas las PK UUID se generan antes de persistir. provider_subject identifica al usuario mediante issuer + sub; no se usa el correo mutable como identidad. UNIQUE(provider, provider_subject).
 - account: display_name y tokens/expiración admiten NULL durante PROVISIONING o DISCONNECTING. ACTIVE exige access_token_cipher, refresh_token_cipher y token_expires_at no nulos. REAUTH_REQUIRED puede conservar los tokens anteriores para recuperar la cuenta.
 - inbox_state puede no existir hasta la primera sincronización. uid_validity es obligatorio; los límites oldest/newest y last_synced_at son NULL hasta disponer de un intervalo sincronizado. Los UID usan enteros de 64 bits positivos.
-- mail: direction, sender_email, occurred_at e is_read son obligatorios. subject se normaliza a cadena vacía. sender_name, message_id y body_cipher son opcionales. body_cipher NULL significa contenido aún no descargado; un cuerpo vacío descargado se cifra como cadena vacía.
+- mail: direction, sender_email, occurred_at e is_read son obligatorios. subject se normaliza a cadena vacía. sender_name, message_id y body_cipher son opcionales. body_cipher NULL significa contenido aún no descargado. body_format=0 conserva texto cifrado previo; body_format=1 cifra un sobre con plainText, html y blockedRemoteImages. La migración 1→2 conserva cuerpos existentes.
 - INBOX exige remote_uid y uid_validity positivos y outbound_id NULL. UNIQUE(id_account, uid_validity, remote_uid) WHERE direction = 'INBOX'.
 - SENT exige outbound_id no nulo y remote_uid/uid_validity NULL. Cada outbox produce como máximo un Mail; ambos deben pertenecer a la misma cuenta. Esta pertenencia y la dirección se verifican dentro de la transacción de registro.
 - outbox_message exige cuerpo, asunto, message_id y fechas; last_error_code es opcional. Un registro listo para envío tiene al menos un destinatario, condición comprobada en la transacción de creación.

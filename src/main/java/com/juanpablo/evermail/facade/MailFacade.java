@@ -4,6 +4,7 @@ import com.juanpablo.evermail.model.*;
 import com.juanpablo.evermail.config.AppConstants;
 import com.juanpablo.evermail.config.Deadline;
 import com.juanpablo.evermail.service.InboxService;
+import com.juanpablo.evermail.service.MailPresentationService;
 import javafx.concurrent.Task;
 import java.util.UUID;
 
@@ -78,6 +79,18 @@ public class MailFacade {
                 deadline.check();
                 inbox.markRead(accountId, mailId);
                 return null;
+            }
+        };
+    }
+
+    /** Caller supplies the same content deadline through download, preparation and rendering. */
+    public Task<MailPresentation> presentationTask(UUID accountId, UUID mailId, boolean reload, Deadline deadline) {
+        return new Task<>() {
+            @Override protected MailPresentation call() throws Exception {
+                deadline.check();
+                MailContent content = reload ? inbox.reloadContent(accountId, mailId, deadline)
+                        : inbox.loadContent(accountId, mailId, deadline);
+                return new MailPresentationService().prepare(content, deadline);
             }
         };
     }

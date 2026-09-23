@@ -39,6 +39,9 @@ classDiagram
     class MailContent {
         -UUID mailId
         -String plainText
+        -String html
+        -boolean blockedRemoteImages
+        -boolean legacyTextOnly
         -List~Recipient~ recipients
     }
     class Recipient {
@@ -150,6 +153,6 @@ RemoteMailId es opcional para SENT y obligatorio para INBOX. InboxCursor es opac
 
 ComposeRequest.submissionId se genera una vez por acción de envío y se conserva al repetir la misma petición. Una petición con ese ID y distinto contenido es inválida. RECORDED referencia sentMailId; otros resultados pueden no tenerlo.
 
-MailContent expone solo texto legible. MimeUtil convierte HTML cuando no hay texto plano, sin ejecutar HTML ni cargar recursos externos. No se modela descarga de adjuntos en el MVP.
+MailContent expone plainText, html opcional, blockedRemoteImages y legacyTextOnly. HybridMime conserva las alternativas; HtmlMail elimina contenido activo y bloquea recursos externos. Las imágenes CID admitidas se incluyen en el cuerpo cifrado, sin descarga general de adjuntos. MailPresentation contiene el documento seguro preparado fuera del hilo JavaFX. Véase [lectura híbrida](../html-reading.md).
 
 La correspondencia física está en el [ER](er-diagram.md). Los DAO utilizan filas de persistencia separadas (AccountRow, MailRow, OutboxRow e InboxStateRow) con campos cifrados tal como figuran allí; no mutan estos modelos para cifrarlos.

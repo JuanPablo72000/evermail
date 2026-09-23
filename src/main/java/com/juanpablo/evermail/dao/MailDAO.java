@@ -12,6 +12,17 @@ public class MailDAO {
         MailHeader header;
         @lombok.ToString.Exclude
         String bodyCipher;
+        int bodyFormat;
+
+        public Row(MailHeader header, String bodyCipher) {
+            this(header, bodyCipher, 0);
+        }
+
+        public Row(MailHeader header, String bodyCipher, int bodyFormat) {
+            this.header = header;
+            this.bodyCipher = bodyCipher;
+            this.bodyFormat = bodyFormat;
+        }
     }
 
     public Row find(Connection c, UUID accountId, UUID id) throws SQLException {
@@ -32,11 +43,11 @@ public class MailDAO {
 
     public void insert(Connection c, Row row) throws SQLException {
         MailHeader h = row.getHeader();
-        Sql.update(c, "INSERT INTO mail VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", h.getId(), h.getAccountId(), h.getDirection(),
+        Sql.update(c, "INSERT INTO mail(id_mail,id_account,direction,remote_uid,uid_validity,message_id,outbound_id,sender_email,sender_name,subject,occurred_at,body_cipher,is_read,body_format) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", h.getId(), h.getAccountId(), h.getDirection(),
                 h.getRemoteId() == null ? null : h.getRemoteId().getUid(),
                 h.getRemoteId() == null ? null : h.getRemoteId().getUidValidity(),
                 h.getMessageId(), h.getOutboundId(), h.getSenderEmail(), h.getSenderName(),
-                h.getSubject(), h.getOccurredAt(), row.getBodyCipher(), h.isRead() ? 1 : 0);
+                h.getSubject(), h.getOccurredAt(), row.getBodyCipher(), h.isRead() ? 1 : 0, row.getBodyFormat());
     }
 
     private Row map(ResultSet rs) throws SQLException {
@@ -47,6 +58,6 @@ public class MailDAO {
                 direction, direction == MailDirection.INBOX ? new RemoteMailId(rs.getLong("uid_validity"), rs.getLong("remote_uid")) : null,
                 rs.getString("message_id"), outbound == null ? null : UUID.fromString(outbound),
                 rs.getString("sender_email"), rs.getString("sender_name"), rs.getString("subject"),
-                Instant.ofEpochMilli(rs.getLong("occurred_at")), rs.getInt("is_read") == 1, body != null), body);
+                Instant.ofEpochMilli(rs.getLong("occurred_at")), rs.getInt("is_read") == 1, body != null), body, rs.getInt("body_format"));
     }
 }

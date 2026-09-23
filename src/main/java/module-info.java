@@ -2,6 +2,8 @@ module com.juanpablo.evermail {
     requires javafx.controls;
     requires javafx.fxml;
     requires javafx.web;
+    requires org.jsoup;
+    requires java.xml;
 
     requires jakarta.mail;
     requires org.xerial.sqlitejdbc;
@@ -17,6 +19,7 @@ module com.juanpablo.evermail {
 
     opens com.juanpablo.evermail to javafx.fxml;
     opens com.juanpablo.evermail.model;
+    opens com.juanpablo.evermail.repository to com.google.gson;
 
     exports com.juanpablo.evermail;
     exports com.juanpablo.evermail.model;

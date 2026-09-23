@@ -14,7 +14,7 @@ class PersistenceTest extends BackendFixture {
         new DatabaseMigrator(transactions).migrate();
         assertEquals(1, count("account"));
         assertEquals(0, count("mail"));
-        assertEquals(1, (int) transactions.read(c -> Sql.one(c, "PRAGMA user_version", rs -> rs.getInt(1))));
+        assertEquals(2, (int) transactions.read(c -> Sql.one(c, "PRAGMA user_version", rs -> rs.getInt(1))));
     }
 
     @Test

@@ -123,17 +123,29 @@ public class MailRepository {
         if (row.getBodyCipher() == null) {
             return null;
         }
-        String plain = security.decrypt(row.getBodyCipher(), keys.read(account.getKeyRef()),
-                new CryptoContext(accountId, mailId, "body"));
-        return new MailContent(mailId, plain, transactions.read(c -> recipients.find(c, mailId, false)));
+        String decoded = security.decrypt(row.getBodyCipher(), keys.read(account.getKeyRef()),
+                new CryptoContext(accountId, mailId, row.getBodyFormat() == 0 ? "body" : "body:hybrid-v1"));
+        var addresses = transactions.read(c -> recipients.find(c, mailId, false));
+        if (row.getBodyFormat() == 0) {
+            return new MailContent(mailId, decoded, null, false,
+                    row.getHeader().getDirection() == MailDirection.INBOX, addresses);
+        }
+        try {
+            StoredBody body = new com.google.gson.Gson().fromJson(decoded, StoredBody.class);
+            if (body == null || body.plainText() == null) throw new IllegalArgumentException("Invalid body");
+            return new MailContent(mailId, body.plainText(), body.html(), body.blockedRemoteImages(), false, addresses);
+        } catch (RuntimeException error) {
+            throw new com.juanpablo.evermail.exception.DatabaseException(ErrorCode.DB_QUERY_FAILED, "Cannot decode cached body", error);
+        }
     }
 
     public void saveContent(UUID accountId, UUID mailId, RemoteMailContent content) throws EvermailException {
         Account account = accounts.require(accountId);
-        String encrypted = security.encrypt(content.getPlainText(), keys.read(account.getKeyRef()),
-                new CryptoContext(accountId, mailId, "body"));
+        String serialized = new com.google.gson.Gson().toJson(new StoredBody(content.getPlainText(), content.getHtml(), content.isBlockedRemoteImages()));
+        String encrypted = security.encrypt(serialized, keys.read(account.getKeyRef()),
+                new CryptoContext(accountId, mailId, "body:hybrid-v1"));
         transactions.write(c -> {
-            if (Sql.update(c, "UPDATE mail SET body_cipher=? WHERE id_account=? AND id_mail=?", encrypted, accountId, mailId) != 1) {
+            if (Sql.update(c, "UPDATE mail SET body_cipher=?,body_format=1 WHERE id_account=? AND id_mail=?", encrypted, accountId, mailId) != 1) {
                 throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Mail disappeared during download");
             }
             recipients.replace(c, mailId, content.getRecipients(), false);
@@ -150,6 +162,8 @@ public class MailRepository {
             return null;
         });
     }
+
+    private record StoredBody(String plainText, String html, boolean blockedRemoteImages) { }
 
     public void remove(UUID accountId, UUID mailId) throws EvermailException {
         transactions.write(c -> {

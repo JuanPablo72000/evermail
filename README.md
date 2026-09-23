@@ -8,8 +8,8 @@ La aplicación se comunica directamente con los proveedores: OAuth2 para autoriz
 
 - Iniciar sesión mediante OAuth2 y cerrar sesión.
 - Consultar la bandeja de entrada.
-- Leer correos recibidos.
-- Redactar y enviar correos nuevos.
+- Leer correos recibidos en HTML seguro o texto, con alternativa de texto disponible.
+- Redactar y enviar correos nuevos en texto plano.
 - Mostrar inicialmente los **50 correos más recientes** de la bandeja.
 - Añadir otros **50 correos** cada vez que se seleccione **Cargar más**.
 - Conservar los correos recibidos y enviados en almacenamiento persistente del dispositivo para reducir solicitudes al proveedor.
@@ -17,6 +17,8 @@ La aplicación se comunica directamente con los proveedores: OAuth2 para autoriz
 Guardar correos enviados no implica una pantalla de enviados en este MVP. Responder, reenviar, gestionar etiquetas y descargar adjuntos no forman parte del alcance mínimo acordado. Existen clases de borradores, etiquetas y adjuntos como infraestructura previa; su presencia no convierte esas funciones en requisitos del MVP.
 
 ## Rendimiento esperado
+
+La ampliación de lectura híbrida, sus límites, migración y componente JavaFX se describen en [Lectura HTML/texto](docs/html-reading.md). La navegación completa del MVP continúa pendiente.
 
 Estos tiempos son **objetivos de aceptación**, no resultados medidos ni garantías ya implementadas.
 
@@ -49,16 +51,16 @@ La implementación de seguridad todavía necesita correcciones y pruebas: consis
 |---|---|
 | Java 21, Gradle y dependencias | Configurados; compilación y empaquetado comprobados con Java 21. |
 | Pantalla de acceso | FXML, estilos e imágenes existentes; carga comprobada. Botones sin conexión a autenticación. |
-| Controladores, navegación y pantalla de carga | Pendientes; App carga directamente la pantalla de acceso. |
+| Controladores, navegación y pantalla de carga | App carga directamente el acceso. Existe un lector híbrido reutilizable, pendiente de conectar a la futura bandeja. |
 | OAuth2 y sesiones IMAP/SMTP | Clases implementadas, con correcciones pendientes y sin validación con cuentas reales en la revisión. |
-| SQLite, DAO y repositorios | Implementados parcialmente; faltan inicialización/migraciones y transacciones completas. Hay un error en las consultas de MailDAO. |
-| Sincronización y lectura | Lógica existente; pendientes correcciones MIME, deduplicación, fechas y separación de bandeja/otros correos. |
-| Cargar más | Pendiente; el código actual utiliza un límite de 50, sin paginación del MVP. |
+| SQLite, DAO y repositorios | Migraciones y transacciones con pruebas. La versión 2 conserva los cuerpos anteriores y añade almacenamiento híbrido cifrado. |
+| Sincronización y lectura | Backend con caché, extracción híbrida MIME, limpieza HTML y pruebas. Falta validar con proveedores reales e integrar la navegación. |
+| Cargar más | Backend paginado en bloques de 50 con pruebas; pendiente de conectar a la bandeja. |
 | Composición y envío | Servicios y fachada existentes; interfaz y recuperación consistente después de SMTP pendientes. |
-| Pruebas automatizadas | JUnit configurado, pero no existen pruebas en src/test. |
-| Objetivos de rendimiento | Pendientes de implementar y medir. |
+| Pruebas automatizadas | Suite JUnit de backend y lector JavaFX disponible en src/test. |
+| Objetivos de rendimiento | Presupuestos implementados; lectura probada localmente. Pendiente medición de los flujos completos con cuentas reales. |
 
-Bloqueos conocidos: consultas que omiten sender_display_name, esquema sin inicialización automática, configuración IMAP con prefijo incorrecto, autorización limitada a dos segundos y guardados que pueden quedar incompletos. Los diagramas detallan las diferencias entre el diseño y el código actual.
+La integración completa de pantallas y la validación con cuentas reales siguen pendientes. Los diagramas y la guía de lectura híbrida describen los contratos del backend.
 
 ## Ejecutar el prototipo
 
@@ -72,7 +74,7 @@ En Windows, con JAVA_HOME apuntando a tu instalación de JDK 21:
 .\gradlew.bat run
 ~~~
 
-La primera ejecución puede descargar Gradle y dependencias. Actualmente run abre únicamente la pantalla de acceso, sin iniciar los servicios. test informa NO-SOURCE mientras no se incorporen pruebas; una compilación correcta no valida los flujos del MVP.
+La primera ejecución puede descargar Gradle y dependencias. Actualmente run abre únicamente la pantalla de acceso, sin iniciar los servicios. test ejecuta la suite automatizada; una compilación correcta no valida por sí sola los flujos completos con proveedores reales.
 
 La lógica de configuración existente espera un archivo .env con GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID y MICROSOFT_CLIENT_SECRET. Esta exigencia necesita corregirse: Microsoft está modelado como cliente público y no utiliza ese secreto. No se necesitan esas credenciales para mostrar la pantalla actual. No publiques credenciales ni archivos .env.
 

@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS mail (
     subject TEXT NOT NULL,
     occurred_at INTEGER NOT NULL,
     body_cipher TEXT,
+    body_format INTEGER NOT NULL DEFAULT 0 CHECK (body_format IN (0, 1)),
     is_read INTEGER NOT NULL CHECK (is_read IN (0, 1)),
     CHECK (
         (direction = 'INBOX' AND remote_uid > 0 AND uid_validity > 0 AND outbound_id IS NULL)

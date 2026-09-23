@@ -38,6 +38,7 @@ javafx {
 }
 
 dependencies {
+    implementation("org.jsoup:jsoup:1.22.2")
     // Jakarta Mail - IMAP/SMTP protocols
     implementation("org.eclipse.angus:jakarta.mail:2.0.3")
 

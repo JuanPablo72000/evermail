@@ -55,14 +55,25 @@ public class InboxService {
     }
 
     public MailContent loadContent(UUID accountId, UUID mailId, Deadline deadline) throws EvermailException {
+        return loadContent(accountId, mailId, deadline, false);
+    }
+
+    /** Explicit upgrade/retry only: ordinary opens never discard offline legacy text. */
+    public MailContent reloadContent(UUID accountId, UUID mailId, Deadline deadline) throws EvermailException {
+        return loadContent(accountId, mailId, deadline, true);
+    }
+
+    private MailContent loadContent(UUID accountId, UUID mailId, Deadline deadline, boolean reload) throws EvermailException {
         deadline.check();
         MailContent cached = mails.readContent(accountId, mailId);
-        if (cached != null) {
+        deadline.check();
+        if (cached != null && !reload) {
             return cached;
         }
         return coordinator.exclusive(accountId, deadline, () -> {
             MailContent again = mails.readContent(accountId, mailId);
-            if (again != null) {
+            deadline.check();
+            if (again != null && !reload) {
                 return again;
             }
             MailHeader header = mails.findHeader(accountId, mailId);
@@ -73,7 +84,10 @@ public class InboxService {
                 RemoteMailContent content = session.fetchContent(header.getRemoteId(), deadline);
                 deadline.check();
                 mails.saveContent(accountId, mailId, content);
-                return mails.readContent(accountId, mailId);
+                deadline.check();
+                MailContent result = mails.readContent(accountId, mailId);
+                deadline.check();
+                return result;
             } catch (MailFetchException e) {
                 if (e.getErrorCode() == ErrorCode.MAIL_NOT_FOUND) {
                     mails.remove(accountId, mailId);

@@ -122,6 +122,8 @@ public abstract class BackendFixture {
         public boolean throwDuringSend;
         public Runnable afterSubmission = () -> {};
         public RemoteInboxPage remotePage;
+        public RemoteMailContent remoteContent = new RemoteMailContent("Downloaded", List.of());
+        public boolean failContent;
         public AtomicInteger inboxRequests = new AtomicInteger();
 
         @Override
@@ -155,8 +157,9 @@ public abstract class BackendFixture {
                     return remotePage;
                 }
                 @Override
-                public RemoteMailContent fetchContent(RemoteMailId remote, Deadline ignored) {
-                    return new RemoteMailContent("Downloaded", List.of());
+                public RemoteMailContent fetchContent(RemoteMailId remote, Deadline ignored) throws EvermailException {
+                    if (failContent) throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Unavailable");
+                    return remoteContent;
                 }
                 @Override
                 public void close() {

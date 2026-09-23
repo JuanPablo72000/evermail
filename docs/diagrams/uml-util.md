@@ -13,6 +13,17 @@ classDiagram
         +extractHeader(MimeMessage message, RemoteMailId remoteId) RemoteMailHeader$
         +extractRecipients(MimeMessage message) List~Recipient~$
     }
+    class HybridMime {
+        +extract(Part message, Deadline deadline) RemoteMailContent$
+    }
+    class HtmlMail {
+        +sanitize(String raw, ImageResolver resolver, Deadline deadline) SafeBody$
+        +document(String safeHtml) String$
+    }
+    class InlineImages {
+        +dataUri(byte[] bytes) String$
+        +validateDataUri(String uri) String$
+    }
     class DateUtil {
         +format(Instant instant, ZoneId zone) String$
     }
@@ -49,7 +60,10 @@ classDiagram
     KeyStoreService --> SecurityUtil : genera clave
     KeyStoreService --> Keyring
     OAuthClient --> ProviderConfig
-    InboxSession ..> MimeUtil
+    InboxSession ..> HybridMime
+    HybridMime ..> MimeUtil
+    HybridMime ..> HtmlMail
+    HybridMime ..> InlineImages
     SmtpSession ..> OutboxMessage
 ```
 
@@ -67,7 +81,7 @@ Se limita la vida de credenciales y cuerpos descifrados; no se incluyen en toStr
 
 ## MIME, direcciones y red
 
-MimeUtil recorre multipart anidados, prioriza text/plain y convierte HTML mediante un parser sin cargar recursos externos. Omite partes attachment y no expone scripts ni HTML ejecutable. Respeta charset y decodificación MIME; distingue ausencia de cuerpo de una extracción fallida.
+HybridMime recorre multipart con límites, conserva text/plain y text/html, resuelve imágenes CID referenciadas y respeta charset. MimeUtil mantiene la conversión a texto y extracción de destinatarios. HtmlMail limpia HTML y CSS con una lista permitida; InlineImages valida imágenes raster acotadas. Se omiten adjuntos ordinarios y recursos externos. Véase [lectura híbrida](../html-reading.md).
 
 EmailValidator utiliza análisis de direcciones estructurado, conserva el local-part y normaliza el dominio/espacios. Consolida duplicados del mismo rol y rechaza roles contradictorios antes de SMTP. No aplica reglas privadas de un proveedor a todas las direcciones.
 

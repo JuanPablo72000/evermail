@@ -5,6 +5,7 @@ import com.juanpablo.evermail.exception.*;
 import com.juanpablo.evermail.model.*;
 import com.juanpablo.evermail.repository.AccountRepository;
 import com.juanpablo.evermail.util.MimeUtil;
+import com.juanpablo.evermail.util.HybridMime;
 import jakarta.mail.*;
 import jakarta.mail.internet.*;
 import java.time.Instant;
@@ -231,9 +232,9 @@ public class MailSessionProvider implements MailGateway {
                 if (message == null || message.isExpunged()) {
                     throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Message no longer exists in inbox");
                 }
-                String text = MimeUtil.extractReadableText(message);
+                RemoteMailContent content = HybridMime.extract(message, deadline);
                 deadline.check();
-                return new RemoteMailContent(text, MimeUtil.extractRecipients(message));
+                return content;
             } catch (Exception e) {
                 throw fetchError(e);
             }

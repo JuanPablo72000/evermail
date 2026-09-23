@@ -77,7 +77,7 @@ InboxSession usa IMAPS, propiedades mail.imaps.*, XOAUTH2, validación TLS, time
 
 readCached no hace red. refresh trae los 50 más recientes, conserva cuerpos existentes y reconcilia los UID del intervalo visible. loadMore consulta una página local completa o recupera hasta 50 UID inferiores al cursor; confirma cobertura solo tras completar la página. Los nuevos mensajes no desplazan el cursor de páginas anteriores. Un UIDVALIDITY distinto invalida cursores y obliga a refrescar.
 
-openHeader lee caché; loadContent lee primero cuerpo local y, si falta, obtiene el mensaje por UID. No descarga adjuntos ni imágenes remotas. Si el mensaje dejó de existir informa MAIL_NOT_FOUND y actualiza caché. La lectura se marca localmente al mostrar contenido.
+openHeader lee caché; loadContent lee primero el cuerpo local y, si falta, obtiene el mensaje por UID. HybridMime conserva HTML/texto y resuelve imágenes CID acotadas; no descarga adjuntos ordinarios ni imágenes remotas. reloadContent permite recuperar formato explícitamente conservando texto antiguo durante aperturas normales. Si el mensaje dejó de existir informa MAIL_NOT_FOUND y actualiza caché. La lectura se marca localmente al mostrar contenido. MailPresentationService prepara HTML seguro bajo el mismo Deadline.
 
 ## Envío y recuperación
 
