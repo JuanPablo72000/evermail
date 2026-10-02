@@ -1,59 +1,15 @@
-#background {
-    -fx-background-image: url("../images/background.png");
-    -fx-background-size: cover;
-    -fx-background-position: center center;
-}
-
-#evermail_text {
-    -fx-text-fill: #FBBF24;
-}
-
-#vision_text {
-    -fx-text-fill: #EAE9FC;
-}
-
-#login_panel {
-    /* 1. Fondo semi-transparente */
-    -fx-background-color: rgba(255, 255, 255, 0.30);
-
-    /* 2. Bordes redondeados */
-    -fx-background-radius: 20;
-    -fx-border-radius: 20;
-
-    /* 3. Borde blanco fino para simular el corte del cristal */
-    -fx-border-color: rgba(255, 255, 255, 0.4);
-    -fx-border-width: 1.5;
-
-    /* 4. Sombra exterior sutil */
-    -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.3), 15, 0, 0, 5);
-}
-
-#welcome_text {
-    -fx-text-fill: #EAE9FC;
-}
-
-#sign_in_text {
-    -fx-text-fill: #EAE9FC;
-}
-
-#google_button {
-    -fx-background-color: #EAE9FC;
-    -fx-background-radius: 12; /* Corregido para redondear el fondo */
-}
-
-#microsoft_button {
-    -fx-background-color: #EAE9FC;
-    -fx-background-radius: 12; /* Corregido para redondear el fondo */
-}
-
-/* Efecto hover para el botón de Google */
-#google_button:hover {
-    -fx-background-color: #D3D1F5; /* Un tono ligeramente más oscuro que EAE9FC */
-    -fx-cursor: hand; /* Cambia el cursor a una manita */
-}
-
-/* Efecto hover para el botón de Microsoft */
-#microsoft_button:hover {
-    -fx-background-color: #D3D1F5;
-    -fx-cursor: hand;
-}
+.login-view { -fx-background-image: url("../images/background.png"); -fx-background-size: cover; -fx-background-position: center; }
+.login-layout { -fx-padding: 48 40; -fx-hgap: 24; -fx-vgap: 26; }
+.login-intro { -fx-padding: 30 35 30 85; -fx-alignment: center-left; -fx-spacing: 0; }
+.login-intro .brand { -fx-font-family: "Segoe UI"; -fx-font-size: 70px; -fx-font-weight: bold; }
+.login-tagline { -fx-font-size: 25px; -fx-text-fill: #eae9fc; }
+.login-card { -fx-background-color: rgba(35, 23, 54, .93); -fx-background-radius: 18; -fx-padding: 18 18 12 18; -fx-spacing: 12; }
+.login-card .title { -fx-font-size: 26px; }
+.provider-button { -fx-background-color: white; -fx-text-fill: #171020; -fx-border-color: transparent; -fx-padding: 7 15; -fx-font-size: 14px; }
+.provider-button:hover { -fx-background-color: #d6d6d6; }
+.provider-button:pressed { -fx-background-color: #bdbbc4; }
+.login-note { -fx-font-size: 13px; -fx-text-fill: #bcb1cc; }
+.login-layout:compact { -fx-padding: 24 16; }
+.login-intro:compact { -fx-padding: 12; -fx-alignment: center; }
+.login-intro:compact .brand { -fx-font-size: 48px; }
+.login-intro:compact .login-tagline { -fx-font-size: 19px; -fx-text-alignment: center; }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.*?>
+<?import com.juanpablo.evermail.ui.*?>
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="compose" stylesheets="@../css/Common.css,@../css/Compose.css" styleClass="compose" minWidth="0" prefHeight="700">
+<Label text="Envío de Correo" styleClass="compose-title" alignment="CENTER" maxWidth="Infinity" wrapText="true"/>
+<GridPane styleClass="compose-form" minWidth="0"><columnConstraints><ColumnConstraints minWidth="65" halignment="LEFT"/><ColumnConstraints minWidth="0" hgrow="ALWAYS" fillWidth="true"/></columnConstraints>
+<Label text="De:" styleClass="compose-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/><TextField fx:id="fromField" promptText="Cuenta activa" editable="false" minWidth="0" GridPane.rowIndex="0" GridPane.columnIndex="1"/><Label text="Para:" styleClass="compose-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/><TextField fx:id="toField" promptText="correoejemplo@gmail.com" editable="true" minWidth="0" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+<FlowPane styleClass="compose-actions" GridPane.rowIndex="2" GridPane.columnSpan="2"><AnimatedButton fx:id="ccButton" text="CC" styleClass="button,outline"/><AnimatedButton fx:id="bccButton" text="CCO" styleClass="button,outline"/></FlowPane>
+<Label text="CC:" styleClass="compose-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/><TextField fx:id="ccField" promptText="correoejemplo@gmail.com" editable="true" minWidth="0" GridPane.rowIndex="3" GridPane.columnIndex="1"/><Label text="CCO:" styleClass="compose-label" GridPane.rowIndex="4" GridPane.columnIndex="0"/><TextField fx:id="bccField" promptText="correoejemplo@gmail.com" editable="true" minWidth="0" GridPane.rowIndex="4" GridPane.columnIndex="1"/><Label text="Asunto:" styleClass="compose-label" GridPane.rowIndex="5" GridPane.columnIndex="0"/><TextField fx:id="subjectField" promptText="Asunto" editable="true" minWidth="0" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+</GridPane>
+<Label text="Mensaje" styleClass="section-title" maxWidth="Infinity" alignment="CENTER"/>
+<TextArea fx:id="messageField" wrapText="true" minWidth="0" minHeight="145" prefRowCount="7" VBox.vgrow="ALWAYS"/>
+<Label text="Adjuntos" styleClass="section-title" maxWidth="Infinity" alignment="CENTER"/>
+<StackPane fx:id="attachments" styleClass="attachment-space" accessibleText="Adjuntos, función futura"/>
+<HBox styleClass="compose-footer"><AnimatedButton fx:id="discardButton" text="Descartar" styleClass="button,outline"/><Region minWidth="0" HBox.hgrow="ALWAYS"/><AnimatedButton fx:id="sendButton" text="Enviar" styleClass="button,primary"/></HBox>
+</VBox>

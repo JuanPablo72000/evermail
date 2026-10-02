@@ -76,7 +76,7 @@ class LegacyImporterTest {
                     return previous;
                 }
             };
-            AuthService auth = new AuthService(accounts, keys, oauth, new EnvConfig(name -> "configured"),
+            AuthService auth = new AuthService(accounts, keys, oauth, new EnvConfig(name -> name.endsWith("_REDIRECT_PORT") ? null : "configured"),
                     new AccountCoordinator(), Clock.systemUTC());
             Account authorized = auth.login(OAuthProvider.GOOGLE, new CancellationToken());
             assertEquals(migrated.getId(), authorized.getId());

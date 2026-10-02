@@ -30,7 +30,7 @@ class AuthServiceTest extends BackendFixture {
                 return new OAuthCredentials("fresh", previous.getRefreshToken(), Instant.now().plusSeconds(3600));
             }
         };
-        return new AuthService(accounts, keys, oauth, new EnvConfig(name -> "configured"),
+        return new AuthService(accounts, keys, oauth, new EnvConfig(name -> name.endsWith("_REDIRECT_PORT") ? null : "configured"),
                 coordinator, Clock.systemUTC());
     }
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<!-- Sample content exclusively loaded in reader preview mode, never a real message. -->
+<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fitToWidth="true" hbarPolicy="NEVER" minWidth="0">
+<content><VBox spacing="12" minWidth="0">
+<Label text="Evermail · Revisión de interfaz" styleClass="body-heading" wrapText="true"/><Separator/>
+<Label text="Hola, Ana:" wrapText="true"/>
+<Label text="Te comparto un resumen de los puntos principales que revisamos sobre la interfaz de Evermail.&#10;Creo que vamos por buen camino y estas son las propuestas acordadas:" wrapText="true"/>
+<GridPane hgap="0" vgap="0" minWidth="0" styleClass="sample-table">
+<columnConstraints><ColumnConstraints percentWidth="28" minWidth="0"/><ColumnConstraints percentWidth="72" minWidth="0"/></columnConstraints>
+<Label text="Pantalla" styleClass="table-heading" maxWidth="Infinity" GridPane.columnIndex="0" GridPane.rowIndex="0"/><Label text="Propuesta" styleClass="table-heading" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="0"/>
+<Label text="Acceso" maxWidth="Infinity" GridPane.columnIndex="0" GridPane.rowIndex="1"/><Label text="Fondo geométrico y autorización guiada" wrapText="true" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="1"/>
+<Label text="Bandeja" maxWidth="Infinity" GridPane.columnIndex="0" GridPane.rowIndex="2"/><Label text="Lista de correos y envío en paralelo" wrapText="true" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="2"/>
+<Label text="Lectura" maxWidth="Infinity" GridPane.columnIndex="0" GridPane.rowIndex="3"/><Label text="Contenido con formato y navegación" wrapText="true" maxWidth="Infinity" GridPane.columnIndex="1" GridPane.rowIndex="3"/>
+</GridPane><Label text="Gracias por tus comentarios." wrapText="true"/><Label text="Juan Pablo"/>
+</VBox></content></ScrollPane>

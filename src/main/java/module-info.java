@@ -18,6 +18,8 @@ module com.juanpablo.evermail {
     requires static lombok;
 
     opens com.juanpablo.evermail to javafx.fxml;
+    opens com.juanpablo.evermail.ui to javafx.fxml;
+    exports com.juanpablo.evermail.ui;
     opens com.juanpablo.evermail.model;
     opens com.juanpablo.evermail.repository to com.google.gson;
 

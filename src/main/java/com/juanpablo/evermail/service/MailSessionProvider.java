@@ -47,6 +47,10 @@ public class MailSessionProvider implements MailGateway {
     }
 
     private static void timeouts(Properties properties, String protocol, int timeoutMillis) {
+        properties.setProperty("mail.debug", "false");
+        properties.setProperty("mail.debug.auth", "false");
+        properties.setProperty("mail." + protocol + ".auth.login.disable", "true");
+        properties.setProperty("mail." + protocol + ".auth.plain.disable", "true");
         for (String option : List.of("connectiontimeout", "timeout", "writetimeout")) {
             properties.setProperty("mail." + protocol + "." + option, String.valueOf(Math.max(1, timeoutMillis)));
         }

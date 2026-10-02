@@ -1,0 +1,18 @@
+.reader-view { -fx-background-color: #1e1627; }
+.reader-content { -fx-background-color: #1e1627; -fx-padding: 22 20; -fx-spacing: 14; }
+.reader-toolbar { -fx-hgap: 12; -fx-vgap: 10; -fx-alignment: center-left; }
+.reader-toolbar .button { -fx-font-size: 12px; }
+.reader-toolbar .tool-button { -fx-border-color: transparent; -fx-text-fill: white; }
+.reader-toolbar .tool-button:hover { -fx-background-color: transparent; -fx-border-color: white; }
+.reader-toolbar .tool-button:hover .icon-stroke { -fx-stroke: white; }
+.reader-sender { -fx-font-size: 23px; }
+.reader-meta { -fx-hgap: 18; -fx-vgap: 10; -fx-alignment: center-left; }
+.reader-formats { -fx-hgap: 18; -fx-vgap: 8; -fx-alignment: center-right; }
+.reader-body { -fx-background-color: white; -fx-background-radius: 7; -fx-padding: 12; }
+.reader-body .label { -fx-text-fill: #45406d; }
+.reader-body .body-heading { -fx-text-fill: #46159b; -fx-font-size: 28px; -fx-font-weight: bold; }
+.reader-body .separator .line { -fx-border-color: #ffc51b transparent transparent; }
+.reader-text { -fx-text-fill: #45406d; -fx-background-color: white; }
+.reader-text .content { -fx-background-color: white; }
+.sample-table .label { -fx-padding: 7 10; -fx-border-color: #e8e1f2; -fx-border-width: .5; }
+.sample-table .table-heading { -fx-background-color: #ece5f9; -fx-text-fill: #46159b; -fx-font-weight: bold; }

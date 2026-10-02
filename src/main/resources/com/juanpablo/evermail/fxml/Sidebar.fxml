@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.*?>
+<?import com.juanpablo.evermail.ui.*?>
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="sidebar" stylesheets="@../css/Common.css,@../css/Sidebar.css" styleClass="sidebar" minWidth="0">
+<FlowPane alignment="CENTER_LEFT" hgap="10" vgap="6" styleClass="sidebar-brand"><ImageView fitHeight="100" preserveRatio="true" smooth="true"><image><Image url="@../images/Logo_Evermail.png"/></image><viewport><Rectangle2D minX="880" minY="32" width="1064" height="1440"/></viewport></ImageView><Label text="Evermail" styleClass="brand" minWidth="0"/></FlowPane>
+<VBox styleClass="nav-items" minWidth="0">
+<AnimatedButton fx:id="inboxButton" text="Bandeja de Entrada" styleClass="button,nav-button" maxWidth="Infinity"><graphic><MailIcon kind="inbox"/></graphic></AnimatedButton>
+<AnimatedButton fx:id="notesButton" text="Notas" styleClass="button,nav-button" maxWidth="Infinity"><graphic><MailIcon kind="notes"/></graphic></AnimatedButton>
+<AnimatedButton fx:id="calendarButton" text="Calendario" styleClass="button,nav-button" maxWidth="Infinity"><graphic><MailIcon kind="calendar"/></graphic></AnimatedButton>
+<AnimatedButton fx:id="sentButton" text="Enviados" styleClass="button,nav-button" maxWidth="Infinity"><graphic><MailIcon kind="send"/></graphic></AnimatedButton>
+<AnimatedButton fx:id="draftsButton" text="Borradores" styleClass="button,nav-button" maxWidth="Infinity"><graphic><MailIcon kind="draft"/></graphic></AnimatedButton>
+</VBox><Separator/><Region minHeight="0" VBox.vgrow="ALWAYS"/>
+<VBox spacing="12" minWidth="0">
+<HBox spacing="10" alignment="CENTER_LEFT" minWidth="0"><Label fx:id="accountAvatar" text="J" styleClass="avatar"/><VBox minWidth="0" HBox.hgrow="ALWAYS"><Label fx:id="accountName" text="Juan Pablo" styleClass="profile-name" wrapText="true"/><Label fx:id="accountEmail" text="juanpablodev@gmail.com" styleClass="profile-email" minWidth="0" wrapText="true"/></VBox></HBox>
+<AnimatedButton fx:id="logoutButton" text="Cerrar Sesión" maxWidth="Infinity"><graphic><MailIcon kind="logout"/></graphic></AnimatedButton>
+</VBox></VBox>

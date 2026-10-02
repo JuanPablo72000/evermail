@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.*?>
+<?import com.juanpablo.evermail.ui.*?>
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="inbox" stylesheets="@../css/Common.css,@../css/Inbox.css" styleClass="inbox" minWidth="0" prefHeight="700">
+<FlowPane styleClass="inbox-heading" minWidth="0"><Label text="Bandeja de Entrada" styleClass="section-title"/><HBox styleClass="search-box" minWidth="0" prefWidth="220"><MailIcon kind="search"/><TextField fx:id="searchField" promptText="Buscar" minWidth="0" HBox.hgrow="ALWAYS"/></HBox><AnimatedButton fx:id="refreshButton" text="" styleClass="button,icon-button"><graphic><MailIcon kind="refresh"/></graphic></AnimatedButton></FlowPane>
+<Label fx:id="updatedAt" text="Actualizado hace un momento" styleClass="muted,small"/>
+<ListView fx:id="mailList" styleClass="inbox-list" minWidth="0" minHeight="300" VBox.vgrow="ALWAYS"><placeholder><Label text="No hay correos para mostrar" styleClass="muted"/></placeholder></ListView>
+<Separator/><HBox styleClass="inbox-footer" minWidth="0"><Label fx:id="mailCount" text="0 Correos Cargados" styleClass="muted" wrapText="true"/><Region minWidth="0" HBox.hgrow="ALWAYS"/><AnimatedButton fx:id="loadMoreButton" text="Cargar 50 más" styleClass="button,load-more"/></HBox>
+</VBox>

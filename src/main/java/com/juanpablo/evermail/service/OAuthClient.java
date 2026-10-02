@@ -34,6 +34,8 @@ public class OAuthClient implements OAuthGateway {
     }
 
     public OAuthClient(HttpClient http, Browser browser, Clock clock) {
+        if (http.followRedirects() != HttpClient.Redirect.NEVER)
+            throw new IllegalArgumentException("OAuth HTTP redirects must be disabled");
         this.http = http;
         this.browser = browser;
         this.clock = clock;
@@ -50,19 +52,31 @@ public class OAuthClient implements OAuthGateway {
         HttpServer server = null;
         ExecutorService executor = Executors.newSingleThreadExecutor(Thread.ofPlatform().daemon().factory());
         try {
-            server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), config.getRedirectPort()), 0);
             String redirect = "http://127.0.0.1:" + server.getAddress().getPort() + "/callback";
+            String expectedHost = "127.0.0.1:" + server.getAddress().getPort();
             CompletableFuture<Map<String, String>> callback = new CompletableFuture<>();
             server.createContext("/callback", exchange -> {
                 try {
-                    Map<String, String> query = parseQuery(exchange.getRequestURI().getRawQuery());
+                    String raw = exchange.getRequestURI().getRawQuery();
+                    Map<String, String> query = raw != null && raw.length() <= 8192 ? parseQuery(raw) : Map.of();
                     boolean valid = exchange.getRequestMethod().equals("GET")
+                            && exchange.getRemoteAddress().getAddress().isLoopbackAddress()
+                            && expectedHost.equals(exchange.getRequestHeaders().getFirst("Host"))
+                            && !callback.isDone()
                             && exchange.getRequestURI().getPath().equals("/callback")
                             && state.equals(query.get("state"))
-                            && (query.containsKey("code") || query.containsKey("error"));
+                            && (query.containsKey("code") ^ query.containsKey("error"))
+                            && !query.getOrDefault("code", query.getOrDefault("error", "")).isBlank()
+                            && !query.containsKey("access_token") && !query.containsKey("refresh_token") && !query.containsKey("id_token");
                     byte[] body = (valid ? "Authorization received. Return to Evermail." : "Invalid authorization callback.")
                             .getBytes(StandardCharsets.UTF_8);
                     exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+                    exchange.getResponseHeaders().set("Cache-Control", "no-store");
+                    exchange.getResponseHeaders().set("Pragma", "no-cache");
+                    exchange.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+                    exchange.getResponseHeaders().set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+                    exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
                     exchange.sendResponseHeaders(valid ? 200 : 400, body.length);
                     exchange.getResponseBody().write(body);
                     if (valid) {
@@ -110,6 +124,8 @@ public class OAuthClient implements OAuthGateway {
                     }
                 }
             }
+            server.stop(0);
+            server = null;
             if (result.containsKey("error")) {
                 throw new OAuthAuthenticationException(ErrorCode.OAUTH_PROVIDER_ERROR, "Authorization was not granted");
             }
@@ -121,6 +137,7 @@ public class OAuthClient implements OAuthGateway {
             tokenParameters.put("code_verifier", verifier);
             Deadline network = Deadline.after(Duration.ofSeconds(15));
             JsonObject tokens = post(config, tokenParameters, network);
+            cancel.check();
             Identity identity = validator.validate(tokens.has("id_token") ? tokens.get("id_token").getAsString() : null,
                     config, nonce, network);
             return new AuthorizationResult(identity, credentials(tokens, null));
@@ -202,6 +219,7 @@ public class OAuthClient implements OAuthGateway {
     private OAuthCredentials credentials(JsonObject json, String previousRefresh) throws OAuthAuthenticationException {
         try {
             String access = json.get("access_token").getAsString();
+            if (!"Bearer".equalsIgnoreCase(json.get("token_type").getAsString())) throw new IllegalArgumentException();
             String refresh = json.has("refresh_token") ? json.get("refresh_token").getAsString() : previousRefresh;
             long seconds = json.get("expires_in").getAsLong();
             if (access.isBlank() || seconds <= 0 || seconds > 86400 * 30) {

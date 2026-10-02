@@ -60,6 +60,7 @@ docs/
 - [Coordinación de aplicación y sesión](notas-tecnicas/application-coordination.md)
 - [Presentación y navegación](notas-tecnicas/presentation-navigation.md)
 - [Lectura HTML y texto](notas-tecnicas/html-reading.md)
+- [Vistas FXML, estilos y previsualización adaptable](notas-tecnicas/javafx-views.md)
 
 ## Mantenimiento
 

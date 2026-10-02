@@ -41,7 +41,7 @@ final class IntegrationHarness implements AutoCloseable {
                 throw new IllegalStateException("Unexpected OAuth refresh");
             }
         };
-        context = new BackendContext(database, keys, oauth, new EnvConfig(name -> "configured"),
+        context = new BackendContext(database, keys, oauth, new EnvConfig(name -> name.endsWith("_REDIRECT_PORT") ? null : "configured"),
                 (auth, accounts) -> gateway);
         ApplicationCoordinator coordinator = new ApplicationCoordinator(() -> BackendAccess.from(context), 8);
         backend = new CoordinatedPresentationBackend(coordinator);

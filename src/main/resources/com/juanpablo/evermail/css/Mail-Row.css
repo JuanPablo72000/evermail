@@ -1,0 +1,6 @@
+.mail-row { -fx-background-color: #1e1627; -fx-background-radius: 10; -fx-padding: 10 10; -fx-spacing: 10; -fx-border-color: transparent transparent #605469 transparent; -fx-border-width: 0 0 1 0; -fx-cursor: hand; }
+.mail-row:hover { -fx-background-color: #505050; }
+.mail-sender { -fx-font-size: 13px; -fx-font-weight: bold; }
+.mail-subject { -fx-font-size: 12px; }
+.mail-preview, .mail-date { -fx-font-size: 10px; -fx-text-fill: #bfb5cc; }
+.mail-row:read .mail-sender { -fx-font-weight: normal; -fx-text-fill: #bfb5cc; }

@@ -1,0 +1,9 @@
+.compose { -fx-background-color: #1e1627; -fx-padding: 15 16; -fx-spacing: 10; }
+.compose-form { -fx-hgap: 12; -fx-vgap: 16; }
+.compose-label { -fx-font-size: 18px; -fx-font-weight: bold; }
+.compose-title { -fx-font-size: 27px; -fx-font-weight: bold; }
+.compose .text-field { -fx-font-size: 14px; }
+.compose-actions { -fx-hgap: 20; -fx-vgap: 8; -fx-alignment: center; }
+.compose-actions .button { -fx-min-width: 96; }
+.attachment-space { -fx-background-color: #57505f; -fx-background-radius: 6; -fx-min-height: 50; }
+.compose-footer { -fx-spacing: 12; -fx-alignment: center-left; }

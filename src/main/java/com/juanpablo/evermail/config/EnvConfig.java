@@ -24,6 +24,16 @@ public class EnvConfig {
         if (id == null || id.isBlank() || (provider.requiresClientSecret() && (secret == null || secret.isBlank()))) {
             throw new ConfigurationException(ErrorCode.CONFIG_INVALID, "Missing configuration for " + provider.name());
         }
-        return new ProviderConfig(provider, id, secret);
+        int port = provider == OAuthProvider.MICROSOFT ? 53682 : 0;
+        String configured = values.apply(provider.name() + "_REDIRECT_PORT");
+        if (configured != null && !configured.isBlank()) {
+            try {
+                port = Integer.parseInt(configured);
+                if (port < 1024 || port > 65535) throw new NumberFormatException();
+            } catch (NumberFormatException invalid) {
+                throw new ConfigurationException(ErrorCode.CONFIG_INVALID, "Invalid local redirect port");
+            }
+        }
+        return new ProviderConfig(provider, id, secret, port);
     }
 }
