@@ -81,7 +81,7 @@ Se limita la vida de credenciales y cuerpos descifrados; no se incluyen en toStr
 
 ## MIME, direcciones y red
 
-HybridMime recorre multipart con límites, conserva text/plain y text/html, resuelve imágenes CID referenciadas y respeta charset. MimeUtil mantiene la conversión a texto y extracción de destinatarios. HtmlMail limpia HTML y CSS con una lista permitida; InlineImages valida imágenes raster acotadas. Se omiten adjuntos ordinarios y recursos externos. Véase [lectura híbrida](../html-reading.md).
+HybridMime recorre multipart con límites, conserva text/plain y text/html, resuelve imágenes CID referenciadas y respeta charset. MimeUtil mantiene la conversión a texto y extracción de destinatarios. HtmlMail limpia HTML y CSS con una lista permitida; InlineImages valida imágenes raster acotadas. Se omiten adjuntos ordinarios y recursos externos. Véase [lectura híbrida](../../notas-tecnicas/html-reading.md).
 
 EmailValidator utiliza análisis de direcciones estructurado, conserva el local-part y normaliza el dominio/espacios. Consolida duplicados del mismo rol y rechaza roles contradictorios antes de SMTP. No aplica reglas privadas de un proveedor a todas las direcciones.
 

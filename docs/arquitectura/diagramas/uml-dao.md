@@ -64,7 +64,7 @@ classDiagram
 
 ## Unidad de trabajo
 
-DbWork<T> es una función que recibe Connection y devuelve T; Object en el dibujo abrevia el retorno genérico T de read/write. Los tipos Row representan exactamente las columnas del [ER](er-diagram.md), sin descifrar tokens o cuerpos. RemoteUidRange contiene UIDVALIDITY, límites del intervalo y UID presentes confirmados por IMAP.
+DbWork<T> es una función que recibe Connection y devuelve T; Object en el dibujo abrevia el retorno genérico T de read/write. Los tipos Row representan exactamente las columnas del [ER](../../datos/diagramas/er-diagram.md), sin descifrar tokens o cuerpos. RemoteUidRange contiene UIDVALIDITY, límites del intervalo y UID presentes confirmados por IMAP.
 
 TransactionManager posee una única conexión con acceso serializado; ninguna capa externa la usa simultáneamente. read y write ejecutan bloques cortos; write confirma todo o revierte todo. Los DAO no hacen commit, rollback, close ni cambios de autoCommit. Las operaciones SMTP, IMAP, OAuth2 y keyring se realizan fuera de la transacción.
 

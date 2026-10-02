@@ -6,6 +6,8 @@ La aplicación se comunica directamente con los proveedores: OAuth2 para autoriz
 
 ## Alcance del MVP
 
+La [especificación de requisitos del sistema](docs/requisitos/requisitos-del-sistema.md) desarrolla este alcance con criterios de aceptación y decisiones abiertas. Es un borrador inicial para revisión.
+
 - Iniciar sesión mediante OAuth2 y cerrar sesión.
 - Consultar la bandeja de entrada.
 - Leer correos recibidos en HTML seguro o texto, con alternativa de texto disponible.
@@ -18,7 +20,7 @@ Guardar correos enviados no implica una pantalla de enviados en este MVP. Respon
 
 ## Rendimiento esperado
 
-La ampliación de lectura híbrida, sus límites, migración y componente JavaFX se describen en [Lectura HTML/texto](docs/html-reading.md). La navegación completa del MVP continúa pendiente.
+La ampliación de lectura híbrida, sus límites, migración y componente JavaFX se describen en [Lectura HTML/texto](docs/notas-tecnicas/html-reading.md). La integración visual completa del MVP continúa pendiente.
 
 Estos tiempos son **objetivos de aceptación**, no resultados medidos ni garantías ya implementadas.
 
@@ -101,18 +103,18 @@ Java 21 · JavaFX 21.0.6 · Gradle Wrapper 8.13 · Jakarta Mail / Eclipse Angus 
 
 ## Documentación técnica
 
-Los diagramas describen el estado actual salvo donde se identifica explícitamente un diseño pendiente:
+El [índice de documentación](docs/README.md) organiza los requisitos, el diseño, las pruebas y las notas técnicas. Los diagramas existentes se han reubicado sin una revisión completa de su vigencia; no sustituyen al futuro manual de arquitectura.
 
-- [Modelo de datos ER](docs/diagrams/er-diagram.md)
-- [Modelos Java](docs/diagrams/uml-model.md)
-- [DAO y conexión](docs/diagrams/uml-dao.md)
-- [Repositorios](docs/diagrams/uml-repositories.md)
-- [Servicios](docs/diagrams/uml-service.md)
-- [Fachadas](docs/diagrams/uml-facade.md)
-- [Controladores propuestos](docs/diagrams/uml-controllers.md)
-- [Configuración](docs/diagrams/uml-config.md)
-- [Utilidades](docs/diagrams/uml-util.md)
-- [Excepciones](docs/diagrams/uml-exception.md)
+- [Modelo de datos ER](docs/datos/diagramas/er-diagram.md)
+- [Modelos Java](docs/arquitectura/diagramas/uml-model.md)
+- [DAO y conexión](docs/arquitectura/diagramas/uml-dao.md)
+- [Repositorios](docs/arquitectura/diagramas/uml-repositories.md)
+- [Servicios](docs/arquitectura/diagramas/uml-service.md)
+- [Fachadas](docs/arquitectura/diagramas/uml-facade.md)
+- [Controladores propuestos](docs/arquitectura/diagramas/uml-controllers.md)
+- [Configuración](docs/arquitectura/diagramas/uml-config.md)
+- [Utilidades](docs/arquitectura/diagramas/uml-util.md)
+- [Excepciones](docs/arquitectura/diagramas/uml-exception.md)
 
 ## Autor y licencia
 

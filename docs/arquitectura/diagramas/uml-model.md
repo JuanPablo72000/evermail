@@ -153,6 +153,6 @@ RemoteMailId es opcional para SENT y obligatorio para INBOX. InboxCursor es opac
 
 ComposeRequest.submissionId se genera una vez por acción de envío y se conserva al repetir la misma petición. Una petición con ese ID y distinto contenido es inválida. RECORDED referencia sentMailId; otros resultados pueden no tenerlo.
 
-MailContent expone plainText, html opcional, blockedRemoteImages y legacyTextOnly. HybridMime conserva las alternativas; HtmlMail elimina contenido activo y bloquea recursos externos. Las imágenes CID admitidas se incluyen en el cuerpo cifrado, sin descarga general de adjuntos. MailPresentation contiene el documento seguro preparado fuera del hilo JavaFX. Véase [lectura híbrida](../html-reading.md).
+MailContent expone plainText, html opcional, blockedRemoteImages y legacyTextOnly. HybridMime conserva las alternativas; HtmlMail elimina contenido activo y bloquea recursos externos. Las imágenes CID admitidas se incluyen en el cuerpo cifrado, sin descarga general de adjuntos. MailPresentation contiene el documento seguro preparado fuera del hilo JavaFX. Véase [lectura híbrida](../../notas-tecnicas/html-reading.md).
 
-La correspondencia física está en el [ER](er-diagram.md). Los DAO utilizan filas de persistencia separadas (AccountRow, MailRow, OutboxRow e InboxStateRow) con campos cifrados tal como figuran allí; no mutan estos modelos para cifrarlos.
+La correspondencia física está en el [ER](../../datos/diagramas/er-diagram.md). Los DAO utilizan filas de persistencia separadas (AccountRow, MailRow, OutboxRow e InboxStateRow) con campos cifrados tal como figuran allí; no mutan estos modelos para cifrarlos.
