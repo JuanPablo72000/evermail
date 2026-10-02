@@ -17,10 +17,10 @@ public class MailFacade {
     }
 
     public Task<InboxPage> cachedInboxTask(UUID accountId, InboxCursor cursor) {
-        Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
         return new Task<>() {
             @Override
             protected InboxPage call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
                 deadline.check();
                 return inbox.readCached(accountId, cursor);
             }
@@ -28,10 +28,10 @@ public class MailFacade {
     }
 
     public Task<InboxPage> refreshInboxTask(UUID accountId) {
-        Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
         return new Task<>() {
             @Override
             protected InboxPage call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
                 deadline.check();
                 return inbox.refresh(accountId, deadline);
             }
@@ -39,10 +39,10 @@ public class MailFacade {
     }
 
     public Task<InboxPage> loadMoreTask(UUID accountId, InboxCursor cursor) {
-        Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
         return new Task<>() {
             @Override
             protected InboxPage call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.INBOX_BUDGET);
                 deadline.check();
                 return inbox.loadMore(accountId, cursor, deadline);
             }
@@ -50,10 +50,10 @@ public class MailFacade {
     }
 
     public Task<MailHeader> openHeaderTask(UUID accountId, UUID mailId) {
-        Deadline deadline = Deadline.after(AppConstants.OPEN_HEADER_BUDGET);
         return new Task<>() {
             @Override
             protected MailHeader call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.OPEN_HEADER_BUDGET);
                 deadline.check();
                 return inbox.openHeader(accountId, mailId);
             }
@@ -61,10 +61,10 @@ public class MailFacade {
     }
 
     public Task<MailContent> loadContentTask(UUID accountId, UUID mailId) {
-        Deadline deadline = Deadline.after(AppConstants.CONTENT_BUDGET);
         return new Task<>() {
             @Override
             protected MailContent call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.CONTENT_BUDGET);
                 deadline.check();
                 return inbox.loadContent(accountId, mailId, deadline);
             }
@@ -72,10 +72,10 @@ public class MailFacade {
     }
 
     public Task<Void> markReadTask(UUID accountId, UUID mailId) {
-        Deadline deadline = Deadline.after(AppConstants.OPEN_HEADER_BUDGET);
         return new Task<>() {
             @Override
             protected Void call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.OPEN_HEADER_BUDGET);
                 deadline.check();
                 inbox.markRead(accountId, mailId);
                 return null;

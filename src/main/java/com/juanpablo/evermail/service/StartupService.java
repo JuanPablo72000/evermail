@@ -22,17 +22,22 @@ public class StartupService {
     }
 
     public StartupResult start(Deadline deadline) throws EvermailException {
+        deadline.check();
         migrator.migrate();
         deadline.check();
-        auth.recoverAccountLifecycle();
-        legacy.importAccounts();
+        auth.recoverAccountLifecycle(deadline);
+        deadline.check();
+        legacy.importAccounts(deadline);
         deadline.check();
         for (Account account : accounts.list()) {
             deadline.check();
             if (account.getStatus() == AccountStatus.ACTIVE || account.getStatus() == AccountStatus.REAUTH_REQUIRED) {
-                sender.recover(account.getId());
+                sender.recover(account.getId(), deadline);
             }
         }
-        return auth.restoreSession(deadline);
+        deadline.check();
+        StartupResult result = auth.restoreSession(deadline);
+        deadline.check();
+        return result;
     }
 }

@@ -20,6 +20,7 @@ public class MailSendService {
     }
 
     public SendResult send(ComposeRequest request, Deadline deadline) throws EvermailException {
+        deadline.check();
         ComposeRequest valid = compose.validate(request);
         return coordinator.exclusive(valid.getAccountId(), deadline, () -> deliver(valid, deadline));
     }
@@ -74,14 +75,20 @@ public class MailSendService {
     }
 
     public void recover(UUID accountId) throws EvermailException {
-        coordinator.exclusive(accountId, Deadline.after(AppConstants.STARTUP_BUDGET), () -> {
+        recover(accountId, Deadline.after(AppConstants.STARTUP_BUDGET));
+    }
+
+    public void recover(UUID accountId, Deadline deadline) throws EvermailException {
+        coordinator.exclusive(accountId, deadline, () -> {
             for (var row : outbox.recoverable(accountId)) {
+                deadline.check();
                 if (row.getState() == DeliveryState.SENDING) {
                     outbox.transition(accountId, row.getId(), DeliveryState.UNKNOWN, ErrorCode.DELIVERY_UNKNOWN);
                 } else if (row.getState() == DeliveryState.ACCEPTED) {
                     outbox.commitSent(accountId, row.getId());
                 }
             }
+            deadline.check();
             return null;
         });
     }

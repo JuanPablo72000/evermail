@@ -16,10 +16,10 @@ public class StartupFacade {
     }
 
     public Task<StartupResult> startTask() {
-        Deadline deadline = Deadline.after(AppConstants.STARTUP_BUDGET);
         return new Task<>() {
             @Override
             protected StartupResult call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.STARTUP_BUDGET);
                 deadline.check();
                 return startup.start(deadline);
             }

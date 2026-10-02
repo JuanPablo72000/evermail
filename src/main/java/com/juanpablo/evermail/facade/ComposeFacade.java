@@ -16,10 +16,10 @@ public class ComposeFacade {
     }
 
     public Task<SendResult> sendTask(ComposeRequest request) {
-        Deadline deadline = Deadline.after(AppConstants.SEND_BUDGET);
         return new Task<>() {
             @Override
             protected SendResult call() throws Exception {
+                Deadline deadline = Deadline.after(AppConstants.SEND_BUDGET);
                 deadline.check();
                 return sender.send(request, deadline);
             }

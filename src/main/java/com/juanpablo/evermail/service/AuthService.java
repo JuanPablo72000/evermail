@@ -91,6 +91,7 @@ public class AuthService {
     }
 
     public StartupResult restoreSession(Deadline deadline) throws EvermailException {
+        deadline.check();
         for (Account account : accounts.list()) {
             deadline.check();
             if (account.getStatus() == AccountStatus.ACTIVE) {
@@ -99,18 +100,25 @@ public class AuthService {
                 OAuthCredentials credentials = accounts.readCredentials(account.getId());
                 StartupStatus status = credentials.getExpiresAt().isAfter(Instant.now(clock))
                         ? StartupStatus.READY : StartupStatus.OFFLINE;
+                deadline.check();
                 return new StartupResult(account, status);
             }
             if (account.getStatus() == AccountStatus.REAUTH_REQUIRED) {
                 keys.read(account.getKeyRef());
+                deadline.check();
                 return new StartupResult(account, StartupStatus.OFFLINE);
             }
         }
+        deadline.check();
         return new StartupResult(null, StartupStatus.LOGIN_REQUIRED);
     }
 
     public void logout(UUID id) throws EvermailException {
-        coordinator.exclusive(id, Deadline.after(AppConstants.STARTUP_BUDGET), () -> {
+        logout(id, Deadline.after(AppConstants.STARTUP_BUDGET));
+    }
+
+    public void logout(UUID id, Deadline deadline) throws EvermailException {
+        coordinator.exclusive(id, deadline, () -> {
             Account account = accounts.find(id);
             if (account == null) {
                 return null;
@@ -127,10 +135,17 @@ public class AuthService {
     }
 
     public void recoverAccountLifecycle() throws EvermailException {
+        recoverAccountLifecycle(Deadline.after(AppConstants.STARTUP_BUDGET));
+    }
+
+    public void recoverAccountLifecycle(Deadline deadline) throws EvermailException {
+        deadline.check();
         for (Account account : accounts.list()) {
+            deadline.check();
             if (account.getStatus() == AccountStatus.PROVISIONING || account.getStatus() == AccountStatus.DISCONNECTING) {
-                logout(account.getId());
+                logout(account.getId(), deadline);
             }
         }
+        deadline.check();
     }
 }

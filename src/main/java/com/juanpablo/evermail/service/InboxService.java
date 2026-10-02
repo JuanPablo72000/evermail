@@ -33,16 +33,19 @@ public class InboxService {
     }
 
     public InboxPage loadMore(UUID accountId, InboxCursor cursor, Deadline deadline) throws EvermailException {
+        deadline.check();
         if (cursor == null || !cursor.getAccountId().equals(accountId)) {
             throw new MailFetchException(ErrorCode.CURSOR_INVALID, "A cursor for this account is required");
         }
         InboxPage cached = readCached(accountId, cursor);
+        deadline.check();
         if (!cached.isNeedsRemote()) {
             return cached;
         }
         return coordinator.exclusive(accountId, deadline, () -> {
             try (InboxSession session = gateway.openInbox(accountId, deadline)) {
                 RemoteInboxPage page = session.fetchBefore(cursor, AppConstants.MAX_EMAILS_DISPLAYED, deadline);
+                deadline.check();
                 deadline.check();
                 mails.saveInboxPage(accountId, page);
                 return readCached(accountId, cursor);

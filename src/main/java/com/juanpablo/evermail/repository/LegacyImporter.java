@@ -1,5 +1,7 @@
 package com.juanpablo.evermail.repository;
 
+import com.juanpablo.evermail.config.AppConstants;
+import com.juanpablo.evermail.config.Deadline;
 import com.juanpablo.evermail.dao.Sql;
 import com.juanpablo.evermail.exception.*;
 import com.juanpablo.evermail.model.*;
@@ -38,8 +40,14 @@ public class LegacyImporter {
     }
 
     public void importAccounts() throws EvermailException {
+        importAccounts(Deadline.after(AppConstants.STARTUP_BUDGET));
+    }
+
+    public void importAccounts(Deadline deadline) throws EvermailException {
+        deadline.check();
         boolean exists = transactions.read(c -> Sql.one(c,
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='legacy_account'", rs -> rs.getString(1)) != null);
+        deadline.check();
         if (!exists) {
             return;
         }
@@ -59,6 +67,8 @@ public class LegacyImporter {
                         rs.getString("email"), rs.getString("account_name")), rs.getString("access_token"),
                 rs.getString("refresh_token"), rs.getString("token_expires_at"))));
         for (LegacyAccount previous : old) {
+            // Finish each account consistently, then check the shared budget before the next.
+            deadline.check();
             var oldKey = keys.read(String.valueOf(previous.getId()));
             OAuthCredentials tokens = new OAuthCredentials(security.decryptLegacy(previous.getAccess(), oldKey),
                     security.decryptLegacy(previous.getRefresh(), oldKey),
@@ -77,6 +87,7 @@ public class LegacyImporter {
                 return null;
             });
         }
+        deadline.check();
     }
 
     @Value
