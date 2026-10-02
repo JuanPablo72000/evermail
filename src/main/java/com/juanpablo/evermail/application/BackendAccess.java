@@ -14,7 +14,11 @@ public interface BackendAccess extends AutoCloseable {
     MailSendService sender();
 
     static BackendAccess open() throws Exception {
-        BackendContext context = BackendContext.create();
+        return from(BackendContext.create());
+    }
+
+    /** Transfers ownership of an assembled context to this adapter. */
+    static BackendAccess from(BackendContext context) {
         return new BackendAccess() {
             public StartupResult start(Deadline deadline) throws Exception { return context.getStartup().start(deadline); }
             public Account login(OAuthProvider provider, CancellationToken cancellation) throws Exception {

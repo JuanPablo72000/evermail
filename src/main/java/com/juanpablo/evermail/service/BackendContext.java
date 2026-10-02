@@ -7,6 +7,7 @@ import com.juanpablo.evermail.util.SecurityUtil;
 import lombok.Getter;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.function.BiFunction;
 
 /** Backend composition root. It is deliberately not connected to App or any controller yet. */
 @Getter
@@ -23,6 +24,12 @@ public class BackendContext implements AutoCloseable {
     private final LegacyImporter legacy;
 
     public BackendContext(Path database, KeyStoreService keys, OAuthGateway oauth, EnvConfig config) throws EvermailException {
+        this(database, keys, oauth, config, MailSessionProvider::new);
+    }
+
+    /** Allows embedding the backend with a different mail transport. */
+    public BackendContext(Path database, KeyStoreService keys, OAuthGateway oauth, EnvConfig config,
+                          BiFunction<AuthService, AccountRepository, MailGateway> gatewayFactory) throws EvermailException {
         this.keys = keys;
         SecurityUtil security = new SecurityUtil();
         transactions = new TransactionManager(new SqliteConnectionProvider(database));
@@ -31,7 +38,13 @@ public class BackendContext implements AutoCloseable {
         mails = new MailRepository(transactions, accounts, security, keys);
         outbox = new OutboxRepository(transactions, accounts, keys, security);
         auth = new AuthService(accounts, keys, oauth, config, coordinator, Clock.systemUTC());
-        MailSessionProvider sessions = new MailSessionProvider(auth, accounts);
+        MailGateway sessions;
+        try {
+            sessions = java.util.Objects.requireNonNull(gatewayFactory.apply(auth, accounts));
+        } catch (RuntimeException failure) {
+            try { transactions.close(); } catch (Exception close) { failure.addSuppressed(close); }
+            throw failure;
+        }
         inbox = new InboxService(sessions, mails, coordinator);
         sender = new MailSendService(sessions, outbox, new ComposeService(), coordinator);
         legacy = new LegacyImporter(transactions, accounts, security, keys);
