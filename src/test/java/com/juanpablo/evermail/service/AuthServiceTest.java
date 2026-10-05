@@ -15,6 +15,10 @@ class AuthServiceTest extends BackendFixture {
     private final AtomicInteger refreshes = new AtomicInteger();
 
     private AuthService auth(boolean rejectRefresh, String refreshToken) {
+        return auth(rejectRefresh ? ErrorCode.REAUTH_REQUIRED : null, refreshToken);
+    }
+
+    private AuthService auth(ErrorCode rejection, String refreshToken) {
         OAuthGateway oauth = new OAuthGateway() {
             @Override
             public AuthorizationResult authorize(ProviderConfig config, CancellationToken cancel) {
@@ -24,8 +28,8 @@ class AuthServiceTest extends BackendFixture {
             @Override
             public OAuthCredentials refresh(ProviderConfig config, OAuthCredentials previous, Deadline deadline) throws EvermailException {
                 refreshes.incrementAndGet();
-                if (rejectRefresh) {
-                    throw new OAuthAuthenticationException(ErrorCode.REAUTH_REQUIRED, "Rejected");
+                if (rejection != null) {
+                    throw new OAuthAuthenticationException(rejection, "Rejected");
                 }
                 return new OAuthCredentials("fresh", previous.getRefreshToken(), Instant.now().plusSeconds(3600));
             }
@@ -76,6 +80,16 @@ class AuthServiceTest extends BackendFixture {
         accounts.activate(account, new OAuthCredentials("expired", "refresh", Instant.now().minusSeconds(1)));
         assertEquals(StartupStatus.OFFLINE, auth(false, null).restoreSession(budget()).getStatus());
         assertEquals(0, refreshes.get());
+    }
+
+    @Test void missingMailPermissionPreservesCacheAndRequestsNewConsent() throws Exception {
+        mails.saveInboxPage(account.getId(), page(1, 1, 1, false));
+        accounts.activate(account, new OAuthCredentials("expired", "refresh", Instant.now().minusSeconds(1)));
+        var failure = assertThrows(OAuthAuthenticationException.class, () ->
+                auth(ErrorCode.OAUTH_MAIL_PERMISSION_MISSING, null).ensureCredentials(account.getId(), budget()));
+        assertEquals(ErrorCode.OAUTH_MAIL_PERMISSION_MISSING, failure.getErrorCode());
+        assertEquals(AccountStatus.REAUTH_REQUIRED, accounts.find(account.getId()).getStatus());
+        assertEquals(1, count("mail"));
     }
 
     @Test

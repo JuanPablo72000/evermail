@@ -82,7 +82,7 @@ public class AuthService {
                 accounts.activate(account, updated);
                 return updated;
             } catch (OAuthAuthenticationException e) {
-                if (e.getErrorCode() == ErrorCode.REAUTH_REQUIRED) {
+                if (e.getErrorCode() == ErrorCode.REAUTH_REQUIRED || e.getErrorCode() == ErrorCode.OAUTH_MAIL_PERMISSION_MISSING) {
                     accounts.setStatus(id, AccountStatus.REAUTH_REQUIRED);
                 }
                 throw e;

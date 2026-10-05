@@ -137,6 +137,7 @@ public class OAuthClient implements OAuthGateway {
             tokenParameters.put("code_verifier", verifier);
             Deadline network = Deadline.after(Duration.ofSeconds(15));
             JsonObject tokens = post(config, tokenParameters, network);
+            validateMailScope(config.getProvider(), tokens);
             cancel.check();
             Identity identity = validator.validate(tokens.has("id_token") ? tokens.get("id_token").getAsString() : null,
                     config, nonce, network);
@@ -161,7 +162,28 @@ public class OAuthClient implements OAuthGateway {
         Map<String, String> parameters = clientParameters(config);
         parameters.put("grant_type", "refresh_token");
         parameters.put("refresh_token", previous.getRefreshToken());
-        return credentials(post(config, parameters, deadline), previous.getRefreshToken());
+        JsonObject tokens = post(config, parameters, deadline);
+        validateMailScope(config.getProvider(), tokens);
+        return credentials(tokens, previous.getRefreshToken());
+    }
+
+    static void validateMailScope(OAuthProvider provider, JsonObject tokens) throws OAuthAuthenticationException {
+        // OAuth permits omission when the granted scopes are unchanged. Never log the response.
+        if (!tokens.has("scope")) return;
+        JsonElement value = tokens.get("scope");
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString())
+            throw new OAuthAuthenticationException(ErrorCode.OAUTH_TOKEN_INVALID, "Invalid scope response");
+        var granted = new HashSet<>(Arrays.asList(value.getAsString().trim().split("\\s+")));
+        boolean mailGranted = provider == OAuthProvider.GOOGLE
+                ? granted.contains("https://mail.google.com/")
+                : microsoftScope(granted, "IMAP.AccessAsUser.All") && microsoftScope(granted, "SMTP.Send");
+        if (!mailGranted)
+            throw new OAuthAuthenticationException(ErrorCode.OAUTH_MAIL_PERMISSION_MISSING, "Mail permission was not granted");
+    }
+
+    private static boolean microsoftScope(Set<String> granted, String scope) {
+        return granted.contains(scope) || granted.contains("https://outlook.office.com/" + scope)
+                || granted.contains("https://outlook.office365.com/" + scope);
     }
 
     private Map<String, String> clientParameters(ProviderConfig config) {

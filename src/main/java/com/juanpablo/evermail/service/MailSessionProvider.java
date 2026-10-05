@@ -98,7 +98,7 @@ public class MailSessionProvider implements MailGateway {
             transport = session.getTransport("smtp");
             Transport toClose = transport;
             closer = CLOSER.schedule(() -> closeTransport(toClose), deadline.remainingMillis(), TimeUnit.MILLISECONDS);
-            transport.connect(account.getProvider().getSmtpHost(), account.getProvider().getSmtpPort(),
+            transport.connect(account.getProvider().getSmtpHost(account.getProviderSubject()), account.getProvider().getSmtpPort(),
                     account.getEmail(), credentials.getAccessToken());
             deadline.check();
             return new SmtpTransport(session, transport, account.getEmail(), closer);

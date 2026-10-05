@@ -2,6 +2,8 @@ package com.juanpablo.evermail.ui;
 
 import javafx.collections.ListChangeListener;
 import javafx.css.PseudoClass;
+import javafx.geometry.HPos;
+import javafx.geometry.VPos;
 import javafx.scene.Node;
 import javafx.scene.layout.*;
 
@@ -21,7 +23,7 @@ public final class ResponsiveGrid extends GridPane {
     private void arrange() {
         double width = getWidth();
         int next = mode.equals("main") ? width >= 1100 ? 3 : width >= 760 ? 2 : 1
-                : width >= (mode.equals("login") ? 680 : 760) ? 2 : 1;
+                : width >= (mode.equals("login") ? 900 : 760) ? 2 : 1;
         if (!mode.equals("login") && !getChildren().isEmpty()) {
             getChildren().getFirst().pseudoClassStateChanged(PseudoClass.getPseudoClass("narrow"),
                     (next == 1 ? width : width * .26) < 310);
@@ -30,8 +32,9 @@ public final class ResponsiveGrid extends GridPane {
         configuration = next;
         getColumnConstraints().clear(); getRowConstraints().clear();
         double[] ratios = next == 1 ? new double[]{100}
-                : mode.equals("login") ? new double[]{60, 40}
-                : next == 3 ? new double[]{26, 44, 30} : new double[]{26, 74};
+                : mode.equals("login") ? new double[]{56.7, 43.3}
+                : next == 3 ? new double[]{26, 43.53125, 30.46875}
+                : mode.equals("reader") ? new double[]{24.63542, 75.36458} : new double[]{26, 74};
         for (double ratio : ratios) {
             ColumnConstraints column = new ColumnConstraints();
             column.setPercentWidth(ratio); column.setMinWidth(0); column.setHgrow(Priority.ALWAYS);
@@ -42,6 +45,13 @@ public final class ResponsiveGrid extends GridPane {
             clearConstraints(child);
             setHgrow(child, Priority.ALWAYS); setVgrow(child, Priority.ALWAYS);
             setFillWidth(child, true); setFillHeight(child, true);
+            if (mode.equals("login")) {
+                // clearConstraints also removes the alignment authored in FXML.
+                setVgrow(child, Priority.NEVER);
+                setFillHeight(child, false);
+                setValignment(child, VPos.CENTER);
+                setHalignment(child, HPos.CENTER);
+            }
             if (next == 1) { setRowIndex(child, i); setColumnIndex(child, 0); }
             else if (mode.equals("main") && next == 2 && i == 2) {
                 setRowIndex(child, 1); setColumnIndex(child, 0); setColumnSpan(child, 2);

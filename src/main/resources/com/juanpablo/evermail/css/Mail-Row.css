@@ -1,6 +1,8 @@
-.mail-row { -fx-background-color: #1e1627; -fx-background-radius: 10; -fx-padding: 10 10; -fx-spacing: 10; -fx-border-color: transparent transparent #605469 transparent; -fx-border-width: 0 0 1 0; -fx-cursor: hand; }
+.mail-row { -fx-background-color: #1e1527; -fx-background-radius: 0.6em; -fx-border-radius: 0.6em; -fx-padding: 0.42em 0.85em 0.6em 0.95em; -fx-spacing: 1.15em; -fx-border-color: transparent transparent rgba(255,255,255,0.75) transparent; -fx-border-width: 0 0 0.05em 0; -fx-cursor: hand; -fx-pref-height: 5em; -fx-min-height: 5em; }
 .mail-row:hover { -fx-background-color: #505050; }
-.mail-sender { -fx-font-size: 13px; -fx-font-weight: bold; }
-.mail-subject { -fx-font-size: 12px; }
-.mail-preview, .mail-date { -fx-font-size: 10px; -fx-text-fill: #bfb5cc; }
-.mail-row:read .mail-sender { -fx-font-weight: normal; -fx-text-fill: #bfb5cc; }
+.mail-sender { -fx-font-size: 1em; -fx-font-weight: bold; }
+.mail-subject { -fx-font-size: 0.8em; }
+.mail-preview, .mail-date { -fx-font-size: 0.8em; -fx-text-fill: rgba(255,255,255,0.74); }
+/* Custom JavaFX pseudo-class activated by MailCell. */
+/*noinspection CssInvalidPseudoSelector*/
+.mail-row:read .mail-sender { -fx-font-weight: normal; -fx-text-fill: rgba(255,255,255,0.74); }

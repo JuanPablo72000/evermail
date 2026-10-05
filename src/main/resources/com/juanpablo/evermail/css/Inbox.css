@@ -1,10 +1,12 @@
-.inbox { -fx-padding: 15 18 12; -fx-spacing: 8; -fx-background-color: #1e1627; }
-.inbox-heading { -fx-hgap: 12; -fx-vgap: 8; -fx-alignment: center-left; }
-.search-box { -fx-background-color: #51485d; -fx-background-radius: 8; -fx-padding: 2 8; -fx-spacing: 6; -fx-alignment: center-left; }
-.search-box .text-field { -fx-background-color: transparent; -fx-padding: 3; }
+.inbox { -fx-padding: 1.15em 1.6em; -fx-spacing: 0.4em; -fx-background-color: #1e1527; }
+.inbox-heading { -fx-hgap: 0.6em; -fx-vgap: 0.4em; -fx-alignment: center-left; }
+.inbox-heading .section-title { -fx-font-size: 1.3em; }
+.search-box { -fx-background-color: rgba(217,217,217,0.2); -fx-background-radius: 0.6em; -fx-padding: 0.1em 0.6em; -fx-spacing: 0.5em; -fx-alignment: center-left; -fx-pref-width: 21em; -fx-pref-height: 2.5em; }
+.search-box .text-field { -fx-background-color: transparent; -fx-padding: 0; -fx-font-size: 1.1em; }
 .inbox-list { -fx-background-color: transparent; -fx-padding: 0; }
-.list-cell { -fx-background-color: transparent; -fx-text-fill: white; -fx-padding: 0; }
+.list-cell { -fx-background-color: transparent; -fx-text-fill: white; -fx-padding: 0 0 0.42em; }
 .list-cell:filled:hover { -fx-background-color: #505050; }
 .list-cell:filled:selected { -fx-background-color: #44334f; }
 .list-cell:empty { -fx-background-color: transparent; }
-.inbox-footer { -fx-padding: 10 0 0; -fx-spacing: 10; -fx-alignment: center-left; }
+.inbox-footer { -fx-padding: 0.65em 0 0; -fx-spacing: 0.5em; -fx-alignment: center-left; }
+#mailCount { -fx-font-size: 1.2em; }

@@ -62,6 +62,15 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+tasks.register<JavaExec>("diagnoseMail") {
+    group = "verification"
+    description = "Checks saved mail sessions without sending messages or exposing credentials."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.juanpablo.evermail.diagnostics.MailDiagnostics")
+    modularity.inferModulePath.set(false)
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+}
+
 jlink {
     imageZip.set(layout.buildDirectory.file("/distributions/app-${javafx.platform.classifier}.zip"))
     options.set(listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages"))

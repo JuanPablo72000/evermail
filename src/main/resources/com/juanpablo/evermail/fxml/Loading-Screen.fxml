@@ -5,8 +5,8 @@
 <?import javafx.geometry.*?>
 <?import com.juanpablo.evermail.ui.*?>
 <ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Loading.css" styleClass="evermail-view,loading-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="960" prefHeight="540" minWidth="0"><content><VBox fx:id="layout" styleClass="loading-content" alignment="CENTER" minWidth="0">
-<Region minHeight="0" VBox.vgrow="ALWAYS"/><ImageView fitHeight="200" preserveRatio="true" smooth="true"><image><Image url="@../images/Logo_Evermail.png"/></image><viewport><Rectangle2D minX="880" minY="32" width="1064" height="1440"/></viewport></ImageView><Label text="Evermail" styleClass="brand"/>
+<FigmaImage source="20-2-imgLogoEvermail3.png" styleClass="loading-logo"/><Label text="Evermail" styleClass="brand"/>
 <ProgressBar fx:id="loadingProgress" progress="0" maxWidth="800" minWidth="0" styleClass="loading-progress"/>
 <Label fx:id="loadingMessage" text="Iniciando tu experiencia de Correo" wrapText="true" textAlignment="CENTER"/>
 <Label fx:id="loadingDetail" text="Iniciando Almacenamiento Local..." styleClass="muted,small" wrapText="true" textAlignment="CENTER"/>
-<Region minHeight="0" VBox.vgrow="ALWAYS"/></VBox></content></ScrollPane>
+</VBox></content></ScrollPane>

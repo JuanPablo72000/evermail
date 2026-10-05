@@ -1,18 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<?import javafx.scene.image.*?>
-<?import javafx.geometry.*?>
 <?import com.juanpablo.evermail.ui.*?>
-<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Login-Styles.css" styleClass="evermail-view,login-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="960" prefHeight="540" minWidth="0"><content><ResponsiveGrid fx:id="layout" mode="login" styleClass="login-layout">
-<VBox alignment="CENTER_LEFT" styleClass="login-intro" minWidth="0">
-<Label text="Evermail" styleClass="brand"/><Label text="Seguro. Elegante. Eficiente&#10;Accede a tu correo." styleClass="login-tagline" wrapText="true"/>
-</VBox>
-<VBox styleClass="login-card" alignment="CENTER" maxWidth="360" minWidth="0">
-<ImageView fitHeight="150" preserveRatio="true" smooth="true"><image><Image url="@../images/Logo_Evermail.png"/></image><viewport><Rectangle2D minX="880" minY="32" width="1064" height="1440"/></viewport></ImageView><Label text="Bienvenido de Nuevo" styleClass="title" wrapText="true" textAlignment="CENTER"/>
-<Label text="Inicia Sesión en tu Cuenta de Correo" wrapText="true" textAlignment="CENTER"/>
-<Region minHeight="0" prefHeight="8"/>
-<AnimatedButton fx:id="googleButton" text="Continuar con Google" styleClass="button,provider-button" maxWidth="Infinity"><graphic><ImageView fitHeight="24" fitWidth="24" preserveRatio="true"><image><Image url="@../images/Google_Logo.png"/></image></ImageView></graphic></AnimatedButton>
-<AnimatedButton fx:id="microsoftButton" text="Continuar con Microsoft" styleClass="button,provider-button" maxWidth="Infinity"><graphic><ImageView fitHeight="26" fitWidth="26" preserveRatio="true"><image><Image url="@../images/Microsoft_Logo.png"/></image></ImageView></graphic></AnimatedButton>
-<Label text="Se abrirá tu navegador para Iniciar Sesión&#10;Evermail no solicita tu contraseña" styleClass="login-note" wrapText="true" textAlignment="CENTER"/>
-</VBox></ResponsiveGrid></content></ScrollPane>
+<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Login-Styles.css" styleClass="evermail-view,login-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="960" prefHeight="540" minWidth="0">
+<content><ResponsiveGrid fx:id="layout" mode="login" styleClass="login-layout">
+    <VBox styleClass="login-intro" minWidth="0">
+        <Label text="Evermail" styleClass="brand"/>
+        <Label text="Seguro. Elegante. Eficiente&#10;Accede a tu correo." styleClass="login-tagline" wrapText="true"/>
+    </VBox>
+    <LoginCard styleClass="login-card" alignment="TOP_CENTER" minWidth="0" GridPane.halignment="CENTER" GridPane.valignment="CENTER">
+        <FigmaImage source="loginDesign-imgLogoEvermail1.png" styleClass="login-logo"/>
+        <Label text="Bienvenido de Nuevo" styleClass="title" wrapText="true" textAlignment="CENTER"/>
+        <Label text="Inicia Sesión en tu Cuenta de Correo" styleClass="login-subtitle" wrapText="true" textAlignment="CENTER"/>
+        <Region minHeight="22" prefHeight="22"/>
+        <AnimatedButton fx:id="googleButton" text="Continuar con Google" styleClass="button,provider-button">
+            <graphic><FigmaImage source="loginDesign-imgImage1.png" styleClass="provider-icon"/></graphic>
+        </AnimatedButton>
+        <Region minHeight="21" prefHeight="21"/>
+        <AnimatedButton fx:id="microsoftButton" text="Continuar con Microsoft" styleClass="button,provider-button">
+            <graphic><FigmaImage source="loginDesign-imgMicrosoftIcon.png" fitHeightOnly="true" styleClass="provider-icon"/></graphic>
+        </AnimatedButton>
+        <Region minHeight="14" prefHeight="14"/>
+        <Label text="Se abrirá tu navegador para Iniciar Sesión" styleClass="login-note" wrapText="true" textAlignment="CENTER"/>
+        <Region minHeight="6" prefHeight="6"/>
+        <Label text="Evermail no solicita tu contraseña" styleClass="login-note" wrapText="true" textAlignment="CENTER"/>
+    </LoginCard>
+</ResponsiveGrid></content></ScrollPane>

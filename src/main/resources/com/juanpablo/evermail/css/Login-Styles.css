@@ -1,15 +1,24 @@
-.login-view { -fx-background-image: url("../images/background.png"); -fx-background-size: cover; -fx-background-position: center; }
-.login-layout { -fx-padding: 48 40; -fx-hgap: 24; -fx-vgap: 26; }
-.login-intro { -fx-padding: 30 35 30 85; -fx-alignment: center-left; -fx-spacing: 0; }
-.login-intro .brand { -fx-font-family: "Segoe UI"; -fx-font-size: 70px; -fx-font-weight: bold; }
-.login-tagline { -fx-font-size: 25px; -fx-text-fill: #eae9fc; }
-.login-card { -fx-background-color: rgba(35, 23, 54, .93); -fx-background-radius: 18; -fx-padding: 18 18 12 18; -fx-spacing: 12; }
-.login-card .title { -fx-font-size: 26px; }
-.provider-button { -fx-background-color: white; -fx-text-fill: #171020; -fx-border-color: transparent; -fx-padding: 7 15; -fx-font-size: 14px; }
+.login-view { -fx-background-image: url("../images/figma/loginDesign-imgLowPolyGridHaikei1.png"); -fx-background-size: cover; -fx-background-position: center; -fx-border-color: #fbbf24; -fx-border-radius: 12; -fx-background-radius: 12; }
+.login-layout { -fx-padding: 49 41 50 140; -fx-hgap: 24; -fx-vgap: 26; -fx-alignment: center; }
+.login-intro { -fx-alignment: center-left; -fx-spacing: 0; }
+.login-intro .brand { -fx-font-family: "Poppins Medium"; -fx-font-size: 70px; -fx-font-weight: normal; }
+.login-tagline { -fx-font-family: "Poppins Medium"; -fx-font-size: 25px; -fx-font-weight: normal; -fx-text-fill: #eae9fc; }
+/* Height is computed from the content; LoginCard caps it with Region.USE_PREF_SIZE in Java. */
+.login-card { -fx-background-color: rgba(37,26,48,0.8); -fx-background-radius: 18; -fx-padding: 13 17 10; -fx-spacing: 0; -fx-max-width: 326; -fx-min-height: 439; }
+.login-logo { -fx-min-width: 0; -fx-pref-width: 290; -fx-max-width: 290; -fx-min-height: 158; -fx-pref-height: 158; -fx-max-height: 158; }
+.login-card .title { -fx-font-family: "Poppins SemiBold"; -fx-font-size: 26px; -fx-font-weight: normal; -fx-padding: 14 0 0; }
+.login-subtitle { -fx-font-family: "Poppins"; -fx-font-size: 16px; -fx-padding: 8 0 0; }
+.provider-button { -fx-font-family: "Poppins"; -fx-background-color: white; -fx-text-fill: black; -fx-border-color: transparent; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 3 10; -fx-font-size: 15px; -fx-pref-width: 261; -fx-max-width: 261; -fx-min-height: 38; -fx-pref-height: 38; -fx-max-height: 38; -fx-graphic-text-gap: 9; }
+.provider-icon { -fx-min-width: 28; -fx-pref-width: 28; -fx-max-width: 28; -fx-min-height: 28; -fx-pref-height: 28; -fx-max-height: 28; }
 .provider-button:hover { -fx-background-color: #d6d6d6; }
 .provider-button:pressed { -fx-background-color: #bdbbc4; }
-.login-note { -fx-font-size: 13px; -fx-text-fill: #bcb1cc; }
+.login-note { -fx-font-size: 14px; -fx-text-fill: rgba(255,255,255,0.74); }
+/* Custom JavaFX pseudo-class activated by ResponsiveGrid. */
+/*noinspection CssInvalidPseudoSelector*/
 .login-layout:compact { -fx-padding: 24 16; }
-.login-intro:compact { -fx-padding: 12; -fx-alignment: center; }
+/*noinspection CssInvalidPseudoSelector*/
+.login-intro:compact { -fx-alignment: center; }
+/*noinspection CssInvalidPseudoSelector*/
 .login-intro:compact .brand { -fx-font-size: 48px; }
+/*noinspection CssInvalidPseudoSelector*/
 .login-intro:compact .login-tagline { -fx-font-size: 19px; -fx-text-alignment: center; }

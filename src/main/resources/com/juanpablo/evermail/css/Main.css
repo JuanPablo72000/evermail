@@ -1,2 +1,2 @@
-.main-view { -fx-background-color: #1e1627; }
-.main-layout { -fx-hgap: 1; -fx-vgap: 1; -fx-background-color: #54485f; }
+.main-view { -fx-background-color: #251a30; -fx-border-color: #2034e9; -fx-border-radius: 12; -fx-background-radius: 12; }
+.main-layout { -fx-hgap: 0; -fx-vgap: 0; }

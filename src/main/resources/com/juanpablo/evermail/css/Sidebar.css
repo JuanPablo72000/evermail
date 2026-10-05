@@ -1,10 +1,20 @@
-.sidebar { -fx-background-color: #271b33; -fx-padding: 22 18 16; -fx-spacing: 24; }
-.sidebar-brand { -fx-spacing: 10; -fx-padding: 0 0 8 0; }
-.nav-items { -fx-spacing: 5; }
-.nav-button { -fx-border-color: transparent; -fx-text-fill: #e1d9ea; -fx-alignment: center-left; -fx-font-size: 13px; -fx-padding: 7 4; }
+.sidebar { -fx-background-color: #251a30; -fx-padding: 1.5em 1.35em 1.25em; -fx-spacing: 1.1em; }
+.sidebar-brand { -fx-spacing: 0.5em; -fx-alignment: center-left; -fx-padding: 0 0 0.7em; }
+.sidebar-logo { -fx-min-width: 6.7em; -fx-pref-width: 6.7em; -fx-max-width: 6.7em; -fx-min-height: 8.05em; -fx-pref-height: 8.05em; -fx-max-height: 8.05em; }
+.nav-items { -fx-spacing: 0.65em; }
+.nav-button { -fx-border-color: transparent; -fx-text-fill: white; -fx-alignment: center-left; -fx-font-size: 1em; -fx-padding: 0 0.1em; -fx-min-height: 2.5em; -fx-pref-height: 2.5em; -fx-graphic-text-gap: 0.8em; }
 .nav-button:hover { -fx-background-color: #414141; -fx-text-fill: white; }
-.nav-button:hover .icon-stroke { -fx-stroke: #ffc51b; }
-.profile-name { -fx-font-size: 18px; }
-.profile-email { -fx-text-fill: #c0b5cb; -fx-font-size: 17px; }
-.sidebar:compact { -fx-spacing: 14; }
-.sidebar:narrow .brand { -fx-font-size: 26px; }
+.nav-button .mail-icon { -fx-padding: 0.4em; -fx-min-width: 2.5em; -fx-pref-width: 2.5em; -fx-max-width: 2.5em; -fx-min-height: 2.5em; -fx-pref-height: 2.5em; -fx-max-height: 2.5em; }
+.profile-name, .profile-email { -fx-font-size: 1.4em; }
+.profile-email { -fx-text-fill: rgba(255,255,255,0.74); }
+.profile-row { -fx-spacing: 0.75em; -fx-alignment: center-left; }
+.profile-copy { -fx-spacing: 0.35em; }
+.profile-footer { -fx-spacing: 1.1em; -fx-alignment: center; }
+#logoutButton { -fx-font-size: 1.4em; -fx-max-width: 13.78571em; -fx-pref-height: 2.14286em; -fx-alignment: center-left; -fx-padding: 0.25em 0.57143em; }
+/* Custom JavaFX pseudo-classes activated by ResponsiveGrid. */
+/*noinspection CssInvalidPseudoSelector*/
+.sidebar:compact { -fx-spacing: 0.7em; }
+/*noinspection CssInvalidPseudoSelector*/
+.sidebar:narrow .brand { -fx-font-size: 2em; }
+/*noinspection CssInvalidPseudoSelector*/
+.sidebar:narrow .sidebar-logo { -fx-min-width: 4em; -fx-pref-width: 4em; -fx-max-width: 4em; -fx-min-height: 5em; -fx-pref-height: 5em; -fx-max-height: 5em; }

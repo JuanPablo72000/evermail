@@ -95,7 +95,8 @@ public final class ApplicationCoordinator {
         if (pending.size() >= capacity) return busy();
         Account account = session.account();
         return enqueue(cancel -> operation.run(backend, account, Deadline.after(budget)), result -> {
-            if (result.error() != null && result.error().code() == ErrorCode.REAUTH_REQUIRED)
+            if (result.error() != null && (result.error().code() == ErrorCode.REAUTH_REQUIRED
+                    || result.error().code() == ErrorCode.OAUTH_MAIL_PERMISSION_MISSING))
                 setPhase(REAUTH_REQUIRED, account.withStatus(AccountStatus.REAUTH_REQUIRED));
         }, true);
     }

@@ -1,9 +1,10 @@
-.compose { -fx-background-color: #1e1627; -fx-padding: 15 16; -fx-spacing: 10; }
-.compose-form { -fx-hgap: 12; -fx-vgap: 16; }
-.compose-label { -fx-font-size: 18px; -fx-font-weight: bold; }
-.compose-title { -fx-font-size: 27px; -fx-font-weight: bold; }
-.compose .text-field { -fx-font-size: 14px; }
-.compose-actions { -fx-hgap: 20; -fx-vgap: 8; -fx-alignment: center; }
-.compose-actions .button { -fx-min-width: 96; }
-.attachment-space { -fx-background-color: #57505f; -fx-background-radius: 6; -fx-min-height: 50; }
-.compose-footer { -fx-spacing: 12; -fx-alignment: center-left; }
+.compose { -fx-background-color: #1e1527; -fx-padding: 1.2em; -fx-spacing: 0.65em; -fx-border-color: transparent transparent transparent rgba(255,255,255,0.4); -fx-border-width: 0 0 0 0.05em; }
+.compose-form { -fx-hgap: 1em; -fx-vgap: 1.65em; -fx-padding: 1em 0 0; }
+.compose-label { -fx-font-size: 1.4em; -fx-font-family: "Inter SemiBold"; -fx-font-weight: normal; }
+.compose-title { -fx-font-size: 2em; -fx-font-family: "Inter SemiBold"; -fx-font-weight: normal; }
+.compose .text-field { -fx-font-size: 1.1em; -fx-font-family: "Inter SemiBold"; -fx-font-weight: normal; -fx-pref-height: 2.09091em; }
+.compose-actions { -fx-hgap: 5.95em; -fx-vgap: 0.4em; -fx-alignment: center; }
+.compose-actions .button { -fx-min-width: 6.25em; -fx-pref-height: 2.08333em; }
+.attachment-space { -fx-background-color: #56505d; -fx-background-radius: 0.6em; -fx-min-height: 3.75em; -fx-pref-height: 3.75em; }
+.compose-footer { -fx-spacing: 0.6em; -fx-alignment: center-left; -fx-padding: 0.45em 0 0; }
+.compose-footer .button { -fx-font-size: 1.4em; -fx-min-width: 5.35714em; -fx-pref-height: 1.78571em; }

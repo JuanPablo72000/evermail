@@ -20,7 +20,7 @@ Guardar correos enviados no implica una pantalla de enviados en este MVP. Respon
 
 ## Rendimiento esperado
 
-La ampliación de lectura híbrida, sus límites, migración y componente JavaFX se describen en [Lectura HTML/texto](docs/notas-tecnicas/html-reading.md). La integración visual completa del MVP continúa pendiente.
+La lectura híbrida, sus límites y migración se describen en [Lectura HTML/texto](docs/notas-tecnicas/html-reading.md). Las [vistas JavaFX](docs/notas-tecnicas/javafx-views.md) están conectadas al presentador y al backend. La validación con proveedores reales continúa pendiente.
 
 Estos tiempos son **objetivos de aceptación**, no resultados medidos ni garantías ya implementadas.
 
@@ -35,7 +35,7 @@ Estos tiempos son **objetivos de aceptación**, no resultados medidos ni garant�
 
 El tiempo que la persona necesite para autorizar OAuth2 queda separado del arranque. La caché local debe reducir la dependencia de la red y las operaciones de entrada/salida deben ejecutarse fuera del hilo de interfaz.
 
-Los tiempos de red dependen del proveedor y de la conexión. Falta implementar y medir el comportamiento ante demoras: informar el estado real sin bloquear la interfaz, simular un éxito ni reenviar automáticamente un mensaje cuyo resultado sea incierto.
+Los tiempos de red dependen del proveedor y de la conexión. La interfaz informa cargas y errores y bloquea reenvíos inciertos; falta medir los flujos con cuentas reales. No se simula éxito ni se reenvía automáticamente un mensaje cuyo resultado sea incierto.
 
 ## Seguridad y privacidad
 
@@ -43,26 +43,26 @@ El diseño evita almacenar contraseñas de correo y utiliza OAuth2 con PKCE. La 
 
 **La base SQLite completa no está cifrada.** Direcciones, asuntos, fechas y otros metadatos permanecen legibles; el cifrado se aplica a campos específicos. Los cuerpos y tokens se descifran en memoria al utilizarlos.
 
-La implementación de seguridad todavía necesita correcciones y pruebas: consistencia entre base y almacén de claves, recuperación ante errores y manejo seguro de rutas de adjuntos. El cierre de sesión actual elimina la cuenta y sus datos dependientes en SQLite; todavía no revoca tokens remotos ni limpia claves y archivos locales asociados.
+La integración conserva PKCE y validación OIDC, exige TLS para el correo y evita mostrar credenciales en la interfaz o errores. El cierre de sesión elimina la cuenta, sus datos dependientes en SQLite y su clave, con recuperación ante fallos. No revoca el consentimiento remoto. Los adjuntos no forman parte del MVP. Consulta las [protecciones y límites de seguridad](docs/desarrollo/configuracion-oauth.md#protecciones-conservadas-y-reforzadas); no se afirma ausencia total de vulnerabilidades.
 
 ## Estado actual
 
-**Prototipo en desarrollo; los flujos del MVP aún no funcionan de extremo a extremo.**
+**Integración de interfaz y backend implementada; pendiente de configuración y aceptación con cuentas reales.**
 
 | Área | Estado real |
 |---|---|
 | Java 21, Gradle y dependencias | Configurados; compilación y empaquetado comprobados con Java 21. |
-| Pantalla de acceso | FXML, estilos e imágenes existentes; carga comprobada. Botones sin conexión a autenticación. |
-| Controladores, navegación y pantalla de carga | App carga directamente el acceso. Existe un lector híbrido reutilizable, pendiente de conectar a la futura bandeja. |
-| OAuth2 y sesiones IMAP/SMTP | Clases implementadas, con correcciones pendientes y sin validación con cuentas reales en la revisión. |
+| Pantalla de acceso | FXML adaptable con botones conectados a Google/Microsoft y cancelación de autorización. |
+| Controladores, navegación y pantalla de carga | Arranque, restauración, recuperación y navegación conectados mediante MailWindow y MailPresenter. |
+| OAuth2 y sesiones IMAP/SMTP | Integrados y con pruebas de fronteras de seguridad; falta validar registros y cuentas reales. |
 | SQLite, DAO y repositorios | Migraciones y transacciones con pruebas. La versión 2 conserva los cuerpos anteriores y añade almacenamiento híbrido cifrado. |
-| Sincronización y lectura | Backend con caché, extracción híbrida MIME, limpieza HTML y pruebas. Falta validar con proveedores reales e integrar la navegación. |
-| Cargar más | Backend paginado en bloques de 50 con pruebas; pendiente de conectar a la bandeja. |
-| Composición y envío | Servicios y fachada existentes; interfaz y recuperación consistente después de SMTP pendientes. |
-| Pruebas automatizadas | Suite JUnit de backend y lector JavaFX disponible en src/test. |
+| Sincronización y lectura | Bandeja con caché y lector HTML/texto seguro conectados; falta validar muestras de proveedores reales. |
+| Cargar más | Control conectado al backend paginado en bloques de 50. |
+| Composición y envío | Formulario conectado; estados de aceptación, guardado e incertidumbre diferenciados. |
+| Pruebas automatizadas | Suite JUnit de backend, integración JavaFX, OAuth, persistencia y lectores disponible en src/test. |
 | Objetivos de rendimiento | Presupuestos implementados; lectura probada localmente. Pendiente medición de los flujos completos con cuentas reales. |
 
-La integración completa de pantallas y la validación con cuentas reales siguen pendientes. Los diagramas y la guía de lectura híbrida describen los contratos del backend.
+La validación con cuentas reales sigue pendiente. Los diagramas anteriores pueden no reflejar las nuevas clases de integración; consulta la guía de vistas y configuración.
 
 ## Ejecutar el prototipo
 
@@ -76,9 +76,9 @@ En Windows, con JAVA_HOME apuntando a tu instalación de JDK 21:
 .\gradlew.bat run
 ~~~
 
-La primera ejecución puede descargar Gradle y dependencias. Actualmente run abre únicamente la pantalla de acceso, sin iniciar los servicios. test ejecuta la suite automatizada; una compilación correcta no valida por sí sola los flujos completos con proveedores reales.
+La primera ejecución puede descargar Gradle y dependencias. `run` inicia el backend y restaura la sesión o muestra acceso. `test` ejecuta la suite automatizada; una compilación correcta no valida por sí sola los flujos completos con proveedores reales. `run --args="--preview=main"` abre solo la previsualización con datos ficticios, sin servicios.
 
-La lógica de configuración existente espera un archivo .env con GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID y MICROSOFT_CLIENT_SECRET. Esta exigencia necesita corregirse: Microsoft está modelado como cliente público y no utiliza ese secreto. No se necesitan esas credenciales para mostrar la pantalla actual. No publiques credenciales ni archivos .env.
+Copia `.env.example` como `.env` y completa los valores del proveedor que vayas a utilizar: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, o `MICROSOFT_CLIENT_ID`. Microsoft usa un cliente público sin secreto y un retorno local configurable mediante `MICROSOFT_REDIRECT_PORT` (53682 por defecto). Sigue la [guía de configuración OAuth](docs/desarrollo/configuracion-oauth.md). No publiques credenciales ni archivos `.env`.
 
 La ruta de datos actual es %APPDATA%\Evermail\evermail.db. El prototipo está orientado a Windows; otras plataformas no están verificadas. No se deben borrar bases existentes para sustituir las migraciones pendientes.
 
@@ -86,10 +86,11 @@ La ruta de datos actual es %APPDATA%\Evermail\evermail.db. El prototipo está or
 
 La dirección principal de llamadas es:
 
-controller → facade → service → repository → dao
+ui → presentation → application → service → repository → dao
 
-- **controller / navigation:** interacción y navegación previstas, todavía pendientes.
-- **facade:** construye Task de JavaFX; el consumidor decide cuándo ejecutarlas.
+- **ui / presentation / navigation:** FXML, renderizado, acciones de usuario, estados y rutas.
+- **application:** coordina sesión, cancelación y trabajo fuera del hilo visual.
+- **controller / facade:** componentes anteriores reutilizables y fachadas Task; la interfaz principal utiliza el coordinador.
 - **service:** lógica síncrona de autenticación y correo, sin dependencias de JavaFX.
 - **repository:** combina DAO y coordina el cifrado de campos.
 - **dao:** acceso SQL; utiliza SqliteConnectionProvider, ubicado actualmente en repository.

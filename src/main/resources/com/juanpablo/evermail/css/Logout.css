@@ -1,7 +1,8 @@
-.logout-view { -fx-background-color: #1e1e1e; -fx-padding: 20; }
-.logout-card { -fx-background-color: #271b33; -fx-border-color: #a8a0c8; -fx-border-radius: 10; -fx-background-radius: 10; }
-.logout-content { -fx-padding: 0 22 22; -fx-spacing: 14; }
-.logout-content .title { -fx-font-size: 25px; -fx-text-alignment: center; }
-.logout-buttons { -fx-hgap: 35; -fx-vgap: 12; -fx-alignment: center; -fx-padding: 16 0 0; }
-.logout-buttons .button { -fx-min-width: 180; -fx-font-size: 20px; }
-.logout-copy { -fx-text-fill: #d9cfdf; -fx-text-alignment: center; }
+.logout-view { -fx-background-color: #1e1e1e; }
+.logout-card { -fx-background-color: #251a30; -fx-border-color: #9f9dc8; -fx-border-width: 2; -fx-border-radius: 18; -fx-background-radius: 18; }
+.logout-content { -fx-padding: 0 26 39; -fx-spacing: 18; }
+.logout-logo { -fx-min-width: 0; -fx-pref-width: 732; -fx-max-width: 732; -fx-min-height: 403; -fx-pref-height: 403; -fx-max-height: 403; }
+.logout-content .title { -fx-font-size: 40px; -fx-text-alignment: center; }
+.logout-buttons { -fx-hgap: 86; -fx-vgap: 16; -fx-alignment: center; -fx-padding: 35 0 0; }
+.logout-buttons .button { -fx-min-width: 280; -fx-pref-width: 300; -fx-pref-height: 75; -fx-font-size: 32px; }
+.logout-copy { -fx-font-size: 23.5px; -fx-text-fill: white; -fx-text-alignment: center; }

@@ -61,6 +61,7 @@ docs/
 - [Presentación y navegación](notas-tecnicas/presentation-navigation.md)
 - [Lectura HTML y texto](notas-tecnicas/html-reading.md)
 - [Vistas FXML, estilos y previsualización adaptable](notas-tecnicas/javafx-views.md)
+- [Configurar OAuth y ejecutar la aplicación](desarrollo/configuracion-oauth.md)
 
 ## Mantenimiento
 

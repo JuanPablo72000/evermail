@@ -179,6 +179,16 @@ class ApplicationCoordinatorTest {
         assertEquals(account.getId(), result(coordinator.submit(Duration.ofSeconds(1), (b, a, d) -> a.getId())).value());
     }
 
+    @Test void missingMailPermissionOffersReauthorizationAndPreservesAccount() throws Exception {
+        ready();
+        OperationResult<Void> failure = result(coordinator.submit(Duration.ofSeconds(1), (b, a, d) -> {
+            throw new OAuthAuthenticationException(ErrorCode.OAUTH_MAIL_PERMISSION_MISSING, "internal details");
+        }));
+        assertEquals(ErrorCode.OAUTH_MAIL_PERMISSION_MISSING, failure.error().code());
+        assertEquals(REAUTH_REQUIRED, coordinator.session().phase());
+        assertEquals(account.getId(), coordinator.session().account().getId());
+    }
+
     @Test void uncertainSendIsReturnedUnchangedAndNeverRetried() throws Exception {
         ready();
         AtomicInteger sends = new AtomicInteger();

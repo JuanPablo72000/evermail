@@ -60,10 +60,10 @@ El sufijo $ indica constantes estáticas. Configuración validada e inmutable; n
 |---|---|
 | INBOX_PAGE_SIZE | 50 |
 | STARTUP_BUDGET | 5 s |
-| INBOX_BUDGET | 5 s por operación de carga/refresco |
+| INBOX_BUDGET | 30 s por operación de carga/refresco |
 | OPEN_HEADER_BUDGET | 2 s |
-| CONTENT_BUDGET | 2 s adicionales |
-| SEND_BUDGET | 4 s |
+| CONTENT_BUDGET | 30 s adicionales |
+| SEND_BUDGET | 60 s |
 | OAUTH_AUTHORIZATION_TIMEOUT | 3 min, cancelable |
 | TOKEN_REFRESH_MARGIN | 60 s |
 | AES_KEY_BITS | 256 |
