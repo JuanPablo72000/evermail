@@ -111,7 +111,7 @@ public final class MailReaderPane extends BorderPane implements AutoCloseable {
             plain.setDisable(false);
             upgrade.setDisable(!content.isLegacyTextOnly());
             status.setText(content.isLegacyTextOnly() ? "Copia antigua en texto. Recuperar formato requiere conexión y autorización."
-                    : content.isBlockedRemoteImages() ? "Imágenes externas bloqueadas por privacidad." : "");
+                    : content.isBlockedRemoteImages() ? "Algunas imágenes no están disponibles. Comprueba la conexión y la configuración del proxy." : "");
             if (presentation.getDocument() == null) showPlain();
             else renderHtml(deadline);
         });

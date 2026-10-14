@@ -4,9 +4,9 @@
 <?import javafx.scene.image.*?>
 <?import javafx.geometry.*?>
 <?import com.juanpablo.evermail.ui.*?>
-<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Logout.css" styleClass="evermail-view,logout-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="760" prefHeight="730" minWidth="0"><content><StackPane fx:id="layout" minWidth="0">
-<StackPane maxWidth="760" minWidth="0" maxHeight="-Infinity">
-<VBox mouseTransparent="true"><Region prefHeight="190" minHeight="-Infinity"/><Region styleClass="logout-card" VBox.vgrow="ALWAYS"/></VBox>
+<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Logout.css" styleClass="evermail-view,logout-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="570" prefHeight="550" minWidth="0"><content><StackPane fx:id="layout" minWidth="0" alignment="TOP_CENTER">
+<StackPane maxWidth="570" minWidth="0" minHeight="-Infinity" maxHeight="-Infinity">
+<VBox mouseTransparent="true"><Region prefHeight="142" minHeight="-Infinity"/><Region styleClass="logout-card" VBox.vgrow="ALWAYS"/></VBox>
 <VBox styleClass="logout-content" alignment="CENTER" minWidth="0">
 <FigmaImage source="102-316-imgLogoEvermail1.png" fitHeightOnly="true" styleClass="logout-logo"/><Label text="Cerrar Sesión en Evermail" styleClass="title" wrapText="true" minHeight="-Infinity"/>
 <Label text="Se eliminarán los datos locales de esta cuenta" styleClass="logout-copy" wrapText="true" minHeight="-Infinity" textAlignment="CENTER"/>

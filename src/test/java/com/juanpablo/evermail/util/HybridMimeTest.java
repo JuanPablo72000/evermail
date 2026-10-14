@@ -48,7 +48,7 @@ class HybridMimeTest {
         assertTrue(result.isBlockedRemoteImages());
         var doc = Jsoup.parse(result.getHtml());
         assertEquals(0, doc.select("script,style,iframe,svg,form,base,[onclick],[href],img[src]").size());
-        assertFalse(result.getHtml().contains("tracker.invalid"));
+        assertEquals("https://tracker.invalid/pixel", doc.select("img[data-evermail-image]").attr("data-evermail-image"));
         assertFalse(result.getHtml().contains("position"));
         assertTrue(result.getHtml().contains("color:#aabbcc"));
         assertEquals("https://example.com", doc.select("a[data-evermail-link]").attr("data-evermail-link"));

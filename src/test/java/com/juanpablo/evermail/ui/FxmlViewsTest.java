@@ -76,7 +76,7 @@ class FxmlViewsTest {
             if (child instanceof Pane pane) verifyChildren(pane, screen);
         }
     }
-    private static void save(WritableImage image, String name) throws Exception {
+    static void save(WritableImage image, String name) throws Exception {
         Path dir = Path.of("build", "ui-previews"); Files.createDirectories(dir);
         int w = (int)image.getWidth(), h = (int)image.getHeight();
         BufferedImage output = new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB);
@@ -149,6 +149,44 @@ class FxmlViewsTest {
                 verifyChildren((Parent) root.getContent(), "login");
             }
             scene.setRoot(new StackPane());
+            return null;
+        });
+    }
+
+    @Test void composeStartsCollapsedAndOnlyButtonsRevealRecipients() throws Exception {
+        fx(() -> {
+            for (boolean bccFirst : List.of(false, true)) {
+                Parent root = FXMLLoader.load(getClass().getResource("/com/juanpablo/evermail/fxml/Compose.fxml"));
+                Scene scene = new Scene(root, 480, 850);
+                root.applyCss(); root.layout();
+                String first = bccFirst ? "bcc" : "cc", second = bccFirst ? "cc" : "bcc";
+                for (String id : List.of("ccLabel", "ccField", "bccLabel", "bccField")) {
+                    assertFalse(root.lookup("#" + id).isVisible(), id);
+                    assertFalse(root.lookup("#" + id).isManaged(), id);
+                }
+                ((TextField)root.lookup("#toField")).setText("recipient@example.com");
+                ((TextField)root.lookup("#subjectField")).setText("Example");
+                assertFalse(root.lookup("#ccField").isVisible());
+                assertFalse(root.lookup("#bccField").isVisible());
+                save(root.snapshot(null, null), "compose-initial.png");
+                ((Button)root.lookup("#" + first + "Button")).fire();
+                root.applyCss(); root.layout();
+                assertTrue(root.lookup("#" + first + "Field").isVisible());
+                assertTrue(root.lookup("#" + first + "Label").isManaged());
+                assertFalse(root.lookup("#" + second + "Field").isVisible());
+                save(root.snapshot(null, null), "compose-only-" + first + ".png");
+                ((Button)root.lookup("#" + second + "Button")).fire();
+                root.applyCss(); root.layout();
+                assertTrue(root.lookup("#ccField").isVisible());
+                assertTrue(root.lookup("#bccField").isVisible());
+                assertTrue(root.lookup("#ccButton").isVisible());
+                assertTrue(root.lookup("#bccButton").isVisible());
+                save(root.snapshot(null, null), "compose-expanded.png");
+                ComposeController.of(root).reset();
+                assertFalse(root.lookup("#ccField").isVisible());
+                assertFalse(root.lookup("#bccField").isVisible());
+                scene.setRoot(new StackPane());
+            }
             return null;
         });
     }

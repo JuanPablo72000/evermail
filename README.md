@@ -2,7 +2,7 @@
 
 Evermail es un cliente de correo de escritorio desarrollado con **Java 21 y JavaFX**. Su objetivo es ofrecer acceso al correo de Google y Microsoft de forma **ligera, ágil, segura y privada**, con almacenamiento local protegido mediante cifrado.
 
-La aplicación se comunica directamente con los proveedores: OAuth2 para autorizar el acceso e IMAP/SMTP para recibir y enviar correo. No incorpora un servidor intermediario propio.
+La aplicación se comunica directamente con los proveedores: OAuth2 para autorizar el acceso e IMAP/SMTP para recibir y enviar correo. Las imágenes externas de los mensajes se descargan mediante un [proxy de Azure configurable](docs/desarrollo/proxy-imagenes.md).
 
 ## Alcance del MVP
 
@@ -20,9 +20,10 @@ Guardar correos enviados no implica una pantalla de enviados en este MVP. Respon
 
 ## Rendimiento esperado
 
-La lectura híbrida, sus límites y migración se describen en [Lectura HTML/texto](docs/notas-tecnicas/html-reading.md). Las [vistas JavaFX](docs/notas-tecnicas/javafx-views.md) están conectadas al presentador y al backend. La validación con proveedores reales continúa pendiente.
+La lectura híbrida, sus límites y migración se describen en [Lectura HTML/texto](docs/desarrollo/lector-correo.md). Las [vistas JavaFX](docs/desarrollo/previsualizar-interfaz.md) están conectadas al presentador y al backend. Google fue confirmado por el usuario; Microsoft continúa en diagnóstico.
 
-Estos tiempos son **objetivos de aceptación**, no resultados medidos ni garantías ya implementadas.
+Estos tiempos son **objetivos de mejora pospuestos para el MVP de uso personal**,
+por decisión del usuario el 11 de octubre de 2026; no son garantías implementadas.
 
 | Operación | Objetivo máximo |
 |---|---:|
@@ -47,22 +48,30 @@ La integración conserva PKCE y validación OIDC, exige TLS para el correo y evi
 
 ## Estado actual
 
-**Integración de interfaz y backend implementada; pendiente de configuración y aceptación con cuentas reales.**
+**Integración de interfaz y backend implementada; Google confirmado por el usuario,
+Microsoft personal con fallos de IMAP/SMTP aún pendientes.**
 
 | Área | Estado real |
 |---|---|
 | Java 21, Gradle y dependencias | Configurados; compilación y empaquetado comprobados con Java 21. |
 | Pantalla de acceso | FXML adaptable con botones conectados a Google/Microsoft y cancelación de autorización. |
 | Controladores, navegación y pantalla de carga | Arranque, restauración, recuperación y navegación conectados mediante MailWindow y MailPresenter. |
-| OAuth2 y sesiones IMAP/SMTP | Integrados y con pruebas de fronteras de seguridad; falta validar registros y cuentas reales. |
+| OAuth2 y sesiones IMAP/SMTP | Google confirmado por el usuario. Microsoft renueva OAuth pero rechaza IMAP y SMTP. |
 | SQLite, DAO y repositorios | Migraciones y transacciones con pruebas. La versión 2 conserva los cuerpos anteriores y añade almacenamiento híbrido cifrado. |
-| Sincronización y lectura | Bandeja con caché y lector HTML/texto seguro conectados; falta validar muestras de proveedores reales. |
-| Cargar más | Control conectado al backend paginado en bloques de 50. |
+| Sincronización y lectura | Bandeja con caché y lector HTML/texto seguro conectados; Google confirmado por el usuario. |
+| Cargar más | Paginación en bloques de 50; funcionamiento confirmado por el usuario. |
 | Composición y envío | Formulario conectado; estados de aceptación, guardado e incertidumbre diferenciados. |
 | Pruebas automatizadas | Suite JUnit de backend, integración JavaFX, OAuth, persistencia y lectores disponible en src/test. |
 | Objetivos de rendimiento | Presupuestos implementados; lectura probada localmente. Pendiente medición de los flujos completos con cuentas reales. |
 
-La validación con cuentas reales sigue pendiente. Los diagramas anteriores pueden no reflejar las nuevas clases de integración; consulta la guía de vistas y configuración.
+Actualización del 11 de octubre de 2026: el usuario confirmó el funcionamiento de
+Google, la restauración de sesión al reabrir y «Cargar más». Microsoft personal
+sigue en diagnóstico por rechazo del acceso IMAP y de la autorización SMTP.
+Los objetivos de velocidad se posponen por decisión del usuario para el MVP de
+uso personal; no se consideran cumplidos ni garantizados. El instalador y el
+ejecutable nativo quedan aplazados a petición del usuario.
+Consulta el [estado de aceptación y las pruebas de errores](docs/pruebas/aceptacion-mvp.md)
+para distinguir la evidencia vigente de las referencias históricas de este README.
 
 ## Ejecutar el prototipo
 

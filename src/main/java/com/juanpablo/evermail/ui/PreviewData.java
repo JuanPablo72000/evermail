@@ -36,7 +36,11 @@ public final class PreviewData {
                 private Parent loadRow() {
                     try {
                         Region row = FXMLLoader.load(PreviewData.class.getResource("/com/juanpablo/evermail/fxml/Mail-Row.fxml"));
-                        row.prefWidthProperty().bind(widthProperty());
+                        setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+                        setPrefWidth(0);
+                        row.prefWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(
+                                () -> Math.max(0, getWidth() - snappedLeftInset() - snappedRightInset()),
+                                widthProperty(), insetsProperty()));
                         return row;
                     } catch (IOException e) { throw new UncheckedIOException(e); }
                 }

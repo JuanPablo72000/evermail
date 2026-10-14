@@ -1,8 +1,8 @@
 # Documentación de Evermail
 
-Este índice separa los requisitos del producto, su diseño y la evidencia de
-verificación. Las notas técnicas de implementación se conservan como material de
-consulta; no sustituyen los documentos formales pendientes.
+Esta carpeta contiene documentación para ti: requisitos, diseño, guías de uso y
+resultados de verificación. Las instrucciones de trabajo del agente se mantienen
+en AGENTS.md, fuera de docs.
 
 ## Organización y estado
 
@@ -33,7 +33,7 @@ docs/
 │   └── diagramas/                # Diagrama ER existente
 ├── pruebas/
 │   └── integracion.md
-└── notas-tecnicas/               # Contexto de implementación, no manual formal
+└── desarrollo/                  # Guías de configuración y uso
 ```
 
 ## Orden de lectura
@@ -41,7 +41,7 @@ docs/
 1. Leer los requisitos para conocer el alcance y los criterios de aceptación.
 2. Consultar los diagramas para ubicar las piezas y sus relaciones.
 3. Consultar las pruebas para distinguir lo comprobado de lo pendiente.
-4. Utilizar las notas técnicas como apoyo al leer la implementación.
+4. Consultar las guías de desarrollo para configurar y utilizar la aplicación.
 
 ## Diagramas de clases
 
@@ -55,13 +55,14 @@ docs/
 - [Utilidades](arquitectura/diagramas/uml-util.md)
 - [Excepciones](arquitectura/diagramas/uml-exception.md)
 
-## Notas técnicas conservadas
+## Guías para usar y configurar Evermail
 
-- [Coordinación de aplicación y sesión](notas-tecnicas/application-coordination.md)
-- [Presentación y navegación](notas-tecnicas/presentation-navigation.md)
-- [Lectura HTML y texto](notas-tecnicas/html-reading.md)
-- [Vistas FXML, estilos y previsualización adaptable](notas-tecnicas/javafx-views.md)
 - [Configurar OAuth y ejecutar la aplicación](desarrollo/configuracion-oauth.md)
+- [Configurar el proxy de imágenes](desarrollo/proxy-imagenes.md)
+- [Formato y compatibilidad del lector](desarrollo/lector-correo.md)
+- [Previsualizar la interfaz](desarrollo/previsualizar-interfaz.md)
+- [Medición de tiempos de lectura](pruebas/tiempos-lectura.md)
+- [Aceptación del MVP y comprobación de errores](pruebas/aceptacion-mvp.md)
 
 ## Mantenimiento
 

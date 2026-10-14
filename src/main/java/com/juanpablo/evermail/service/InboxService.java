@@ -10,11 +10,18 @@ public class InboxService {
     private final MailGateway gateway;
     private final MailRepository mails;
     private final AccountCoordinator coordinator;
+    private final java.util.function.BooleanSupplier imageProxyConfigured;
 
     public InboxService(MailGateway gateway, MailRepository mails, AccountCoordinator coordinator) {
+        this(gateway, mails, coordinator, () -> new ImageProxyClient(new EnvConfig()).configured());
+    }
+
+    InboxService(MailGateway gateway, MailRepository mails, AccountCoordinator coordinator,
+                 java.util.function.BooleanSupplier imageProxyConfigured) {
         this.gateway = gateway;
         this.mails = mails;
         this.coordinator = coordinator;
+        this.imageProxyConfigured = imageProxyConfigured;
     }
 
     public InboxPage readCached(UUID accountId, InboxCursor cursor) throws EvermailException {
@@ -71,6 +78,19 @@ public class InboxService {
         MailContent cached = mails.readContent(accountId, mailId);
         deadline.check();
         if (cached != null && !reload) {
+            if (cached.isLegacyImageReferences() && imageProxyConfigured.getAsBoolean()) {
+                long budget = Math.min(8000, deadline.remainingMillis() - 1500L);
+                if (budget > 0) {
+                    try {
+                        return loadContent(accountId, mailId, Deadline.after(java.time.Duration.ofMillis(budget)), true);
+                    } catch (EvermailException unavailable) {
+                        if (unavailable.getErrorCode() == ErrorCode.MAIL_NOT_FOUND
+                                || unavailable.getErrorCode() == ErrorCode.CANCELLED) throw unavailable;
+                        // Keep the readable encrypted copy when offline or reauthentication is needed.
+                        deadline.check();
+                    }
+                }
+            }
             return cached;
         }
         return coordinator.exclusive(accountId, deadline, () -> {

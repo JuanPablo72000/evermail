@@ -168,6 +168,21 @@ por Microsoft; no tienes que pegarlas en `.env`.
 En cuentas escolares o de trabajo, el administrador puede tener que aprobar la aplicación
 y permitir IMAP/SMTP con OAuth. No desactives las políticas de seguridad para forzar el acceso.
 
+### Habilitar IMAP en una cuenta personal
+
+Entra en [Outlook.com](https://outlook.live.com/mail/) con la misma cuenta que
+autorizaste en Evermail. Abre **Configuración → Correo → Reenvío e IMAP**,
+activa **Permitir que los dispositivos y las aplicaciones usen IMAP** y guarda.
+Después pulsa Actualizar en Evermail.
+[Instrucciones oficiales de Microsoft](https://support.microsoft.com/en-au/outlook/pop-imap-and-smtp-settings-for-outlook-com).
+
+El puerto 587 es el destino remoto para conexiones SMTP salientes, no un puerto
+que Evermail deba reservar localmente. Es distinto de `MICROSOFT_REDIRECT_PORT`.
+Un rechazo SMTP de autenticación demuestra que el servidor respondió y no debe
+interpretarse automáticamente como un bloqueo del puerto. Habilitar IMAP no
+garantiza resolver también el envío: ejecuta `gradlew.bat diagnoseMail` para
+comprobar cada protocolo. El diagnóstico no envía correos.
+
 ## 5. Revisar los valores
 
 | Línea | Qué poner después de `=` |

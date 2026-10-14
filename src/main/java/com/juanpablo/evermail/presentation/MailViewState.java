@@ -16,7 +16,11 @@ public record MailViewState(Route route, SessionSnapshot session, boolean sessio
     public enum ReaderPhase { EMPTY, HEADER_LOADING, CONTENT_LOADING, READY, ERROR }
     public enum BodyMode { TEXT, HTML }
     public record Reader(UUID mailId, MailHeader header, MailPresentation content,
-                         ReaderPhase phase, BodyMode mode, OperationError error) {
+                         ReaderPhase phase, BodyMode mode, OperationError error, boolean imagesLoading) {
+        public Reader(UUID mailId, MailHeader header, MailPresentation content,
+                      ReaderPhase phase, BodyMode mode, OperationError error) {
+            this(mailId, header, content, phase, mode, error, false);
+        }
         public boolean hasHtml() { return content != null && content.getDocument() != null; }
     }
     public enum SendPhase { EDITING, SENDING, SENT, ACCEPTED, UNKNOWN, FAILED }

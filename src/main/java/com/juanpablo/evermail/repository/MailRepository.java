@@ -133,7 +133,8 @@ public class MailRepository {
         try {
             StoredBody body = new com.google.gson.Gson().fromJson(decoded, StoredBody.class);
             if (body == null || body.plainText() == null) throw new IllegalArgumentException("Invalid body");
-            return new MailContent(mailId, body.plainText(), body.html(), body.blockedRemoteImages(), false, addresses);
+            return new MailContent(mailId, body.plainText(), body.html(), body.blockedRemoteImages(), false, addresses,
+                    body.html() != null && body.imageReferencesVersion() < 2);
         } catch (RuntimeException error) {
             throw new com.juanpablo.evermail.exception.DatabaseException(ErrorCode.DB_QUERY_FAILED, "Cannot decode cached body", error);
         }
@@ -141,7 +142,7 @@ public class MailRepository {
 
     public void saveContent(UUID accountId, UUID mailId, RemoteMailContent content) throws EvermailException {
         Account account = accounts.require(accountId);
-        String serialized = new com.google.gson.Gson().toJson(new StoredBody(content.getPlainText(), content.getHtml(), content.isBlockedRemoteImages()));
+        String serialized = new com.google.gson.Gson().toJson(new StoredBody(content.getPlainText(), content.getHtml(), content.isBlockedRemoteImages(), 2));
         String encrypted = security.encrypt(serialized, keys.read(account.getKeyRef()),
                 new CryptoContext(accountId, mailId, "body:hybrid-v1"));
         transactions.write(c -> {
@@ -163,7 +164,7 @@ public class MailRepository {
         });
     }
 
-    private record StoredBody(String plainText, String html, boolean blockedRemoteImages) { }
+    private record StoredBody(String plainText, String html, boolean blockedRemoteImages, int imageReferencesVersion) { }
 
     public void remove(UUID accountId, UUID mailId) throws EvermailException {
         transactions.write(c -> {

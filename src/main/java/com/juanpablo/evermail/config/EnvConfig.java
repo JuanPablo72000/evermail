@@ -18,6 +18,9 @@ public class EnvConfig {
         this.values = values;
     }
 
+    public String imageProxyUrl() { return values.apply("IMAGE_PROXY_URL"); }
+    public String imageProxyKey() { return values.apply("IMAGE_PROXY_KEY"); }
+
     public ProviderConfig loadProvider(OAuthProvider provider) throws ConfigurationException {
         String id = values.apply(provider.name() + "_CLIENT_ID");
         String secret = provider.requiresClientSecret() ? values.apply(provider.name() + "_CLIENT_SECRET") : null;

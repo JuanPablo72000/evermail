@@ -13,7 +13,7 @@ import static com.juanpablo.evermail.presentation.PresentationBackend.InboxActio
 
 /** Headless presentation. Invoke actions on the same serial dispatcher used for notifications. */
 public final class MailPresenter {
-    private enum Slot { SESSION, INBOX, READER, SEND }
+    private enum Slot { SESSION, INBOX, READER, IMAGES, SEND }
     private final PresentationBackend backend;
     private final Executor dispatcher;
     private final Consumer<MailViewState> listener;
@@ -50,7 +50,7 @@ public final class MailPresenter {
         return new MailViewState(disposed ? Route.CLOSED : NavigationRules.resolve(backend.session(), requested),
                 backend.session(), sessionBusy, sessionError,
                 new Inbox(items, inboxBusy, hasMore, stale, inboxError),
-                new Reader(selected, header, content, readerPhase, mode, readerError),
+                new Reader(selected, header, content, readerPhase, mode, readerError, running.containsKey(Slot.IMAGES)),
                 new Compose(draft, sendPhase, sendError, discardConfirmation), logoutConfirmation);
     }
 
@@ -154,6 +154,7 @@ public final class MailPresenter {
     public synchronized void openMail(UUID id) {
         if (!available() || items.stream().noneMatch(mail -> mail.getId().equals(id))) return;
         cancel(Slot.READER);
+        cancel(Slot.IMAGES);
         selected = id; header = null; content = null; readerError = null; mode = BodyMode.TEXT;
         requested = Route.READER; readerPhase = ReaderPhase.HEADER_LOADING;
         publish();
@@ -167,6 +168,11 @@ public final class MailPresenter {
                 mode = content.getDocument() == null ? BodyMode.TEXT : BodyMode.HTML;
                 header = header.withRead(true);
                 items = items.stream().map(mail -> mail.getId().equals(id) ? mail.withRead(true) : mail).toList();
+                publish(); // The readable body reaches JavaFX before any proxy request.
+                backend.images(content.getContent()).ifPresent(task -> bind(Slot.IMAGES, task, images -> {
+                    // Failure leaves the readable body intact; bind rejects stale sessions/selections.
+                    if (images.succeeded()) content = images.value();
+                }));
             });
         });
     }
@@ -175,7 +181,7 @@ public final class MailPresenter {
 
     public synchronized void backToInbox() {
         if (!available()) return;
-        cancel(Slot.READER); clearReader(); requested = Route.INBOX; publish();
+        cancel(Slot.READER); cancel(Slot.IMAGES); clearReader(); requested = Route.INBOX; publish();
     }
 
     public synchronized void showText() {

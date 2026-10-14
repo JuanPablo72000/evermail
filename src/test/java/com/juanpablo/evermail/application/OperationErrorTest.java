@@ -5,6 +5,25 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class OperationErrorTest {
+    @Test void distinguishesSmtpAuthenticationFromNetworkFailuresWithoutExposingSecrets() {
+        Exception[] causes = {
+                new jakarta.mail.AuthenticationFailedException("535 5.7.139 secret-token"),
+                new jakarta.mail.NoSuchProviderException("secret-token"),
+                new java.net.UnknownHostException("secret-token"),
+                new javax.net.ssl.SSLHandshakeException("secret-token"),
+                new java.net.SocketTimeoutException("secret-token"),
+                new java.net.ConnectException("secret-token")
+        };
+        String[] expected = {"rechazó", "componente SMTP", "DNS", "conexión segura", "tiempo de espera", "salientes al puerto 587"};
+        for (int i = 0; i < causes.length; i++) {
+            var wrapped = new jakarta.mail.MessagingException("secret-token", causes[i]);
+            var error = OperationError.from(new MailSendException(ErrorCode.SMTP_CONNECTION_FAILED, wrapped));
+            assertEquals(ErrorCode.SMTP_CONNECTION_FAILED, error.code());
+            assertTrue(error.message().contains(expected[i]), error.message());
+            assertFalse(error.message().contains("secret"));
+            if (i == 0) assertFalse(error.message().contains("587"));
+        }
+    }
     @Test void identifiesNestedInboxFailuresWithoutExposingServerMessages() {
         Exception[] causes = {
                 new jakarta.mail.AuthenticationFailedException("secret-token-and-mail-body"),

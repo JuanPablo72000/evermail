@@ -43,3 +43,4 @@
 .scroll-bar .increment-arrow, .scroll-bar .decrement-arrow { -fx-shape: ""; }
 .avatar { -fx-background-color: #e0c2ff; -fx-background-radius: 100; -fx-text-fill: black; -fx-font-size: 2.5em; -fx-alignment: center; -fx-min-width: 1.5em; -fx-min-height: 1.5em; -fx-pref-width: 1.5em; -fx-pref-height: 1.5em; }
 .operation-banner, .confirmation-content { -fx-background-color: #30213e; -fx-padding: 12 18; }
+.banner-close { -fx-font-size: 1.4em; -fx-min-width: 1.6em; -fx-min-height: 1.6em; -fx-padding: 0; -fx-border-color: transparent; }

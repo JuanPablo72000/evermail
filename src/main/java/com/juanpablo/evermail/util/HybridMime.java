@@ -5,6 +5,7 @@ import com.juanpablo.evermail.exception.*;
 import com.juanpablo.evermail.model.RemoteMailContent;
 import jakarta.mail.*;
 import jakarta.mail.internet.ContentType;
+import jakarta.mail.internet.MimePart;
 import org.jsoup.nodes.Entities;
 import java.io.*;
 import java.nio.charset.Charset;
@@ -25,7 +26,7 @@ public final class HybridMime {
             Body body = parser.walk(message, 0);
             String plain = body.plain();
             if (plain == null) plain = body.html() == null ? "" : MimeUtil.htmlToText(body.html());
-            HtmlMail.SafeBody safe = body.html() == null ? null : HtmlMail.sanitize(body.html(), parser::image, deadline);
+            HtmlMail.SafeBody safe = body.html() == null ? null : HtmlMail.sanitize(body.html(), parser::image, null, true, deadline);
             deadline.check();
             return new RemoteMailContent(plain, safe == null ? null : safe.html(), safe != null && safe.blockedRemoteImages(),
                     message instanceof Message mail ? MimeUtil.extractRecipients(mail) : List.of());
@@ -37,9 +38,8 @@ public final class HybridMime {
         deadline.check();
         if (++parts > AppConstants.MAX_MIME_PARTS || depth > 30) throw new IOException("MIME structure exceeds limit");
         if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) return new Body(null, null);
-        String[] cid = part.getHeader("Content-ID");
-        if (part.isMimeType("image/*") && cid != null && cid.length > 0) {
-            images.putIfAbsent(normalizeCid(cid[0]), part);
+        if (part.isMimeType("image/*") && contentId(part) != null) {
+            images.putIfAbsent(normalizeCid(contentId(part)), part);
             return new Body(null, null);
         }
         if (part.getFileName() != null) return new Body(null, null);
@@ -53,8 +53,9 @@ public final class HybridMime {
             String start = new ContentType(part.getContentType()).getParameter("start");
             int root = 0;
             for (int i = 0; i < multi.getCount(); i++) {
-                String[] id = multi.getBodyPart(i).getHeader("Content-ID");
-                if (start != null && id != null && normalizeCid(start).equals(normalizeCid(id[0]))) root = i;
+                if (start == null) break;
+                String id = contentId(multi.getBodyPart(i));
+                if (id != null && normalizeCid(start).equals(normalizeCid(id))) root = i;
             }
             for (int i = 0; i < multi.getCount(); i++) if (i != root) collectImages(multi.getBodyPart(i), depth + 1);
             return walk(multi.getBodyPart(root), depth + 1);
@@ -96,8 +97,7 @@ public final class HybridMime {
         deadline.check();
         if (++parts > AppConstants.MAX_MIME_PARTS || depth > 30) throw new IOException("MIME structure exceeds limit");
         if (Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) return;
-        String[] ids = part.getHeader("Content-ID");
-        if (part.isMimeType("image/*") && ids != null && ids.length > 0) images.putIfAbsent(normalizeCid(ids[0]), part);
+        if (part.isMimeType("image/*") && contentId(part) != null) images.putIfAbsent(normalizeCid(contentId(part)), part);
         else if (part.isMimeType("multipart/*")) {
             Multipart nested = (Multipart) part.getContent();
             if (nested.getCount() > AppConstants.MAX_MIME_PARTS) throw new IOException("Too many MIME parts");
@@ -131,6 +131,13 @@ public final class HybridMime {
             imageBytes += bytes.length;
             return InlineImages.dataUri(bytes);
         } catch (IOException e) { deadline.check(); return null; }
+    }
+
+    private static String contentId(Part part) throws MessagingException {
+        // IMAP MimePart supplies this from BODYSTRUCTURE, avoiding a header request per part.
+        if (part instanceof MimePart mime) return mime.getContentID();
+        String[] ids = part.getHeader("Content-ID");
+        return ids == null || ids.length == 0 ? null : ids[0];
     }
 
     private static String normalizeCid(String cid) {

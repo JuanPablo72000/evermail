@@ -19,7 +19,13 @@ final class MailCell extends ListCell<MailHeader> {
         } catch (IOException e) { throw new UncheckedIOException(e); }
         avatar = (Label) row.lookup("#avatar"); sender = (Label) row.lookup("#sender");
         subject = (Label) row.lookup("#subject"); preview = (Label) row.lookup("#preview");
-        date = (Label) row.lookup("#date"); row.prefWidthProperty().bind(widthProperty());
+        date = (Label) row.lookup("#date");
+        setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+        // The virtual flow owns the cell width; the graphic must not increase it on each layout pass.
+        setPrefWidth(0);
+        row.prefWidthProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(
+                () -> Math.max(0, getWidth() - snappedLeftInset() - snappedRightInset()),
+                widthProperty(), insetsProperty()));
     }
     @Override protected void updateItem(MailHeader mail, boolean empty) {
         super.updateItem(mail, empty); setText(null);

@@ -11,9 +11,11 @@ public record OperationError(ErrorCode code, String message) {
         if (code == ErrorCode.IMAP_CONNECTION_FAILED || code == ErrorCode.IMAP_FETCH_FAILED) {
             return new OperationError(code, inboxMessage(failure, code));
         }
+        if (code == ErrorCode.SMTP_CONNECTION_FAILED) {
+            return new OperationError(code, smtpMessage(failure));
+        }
         String message = switch (code) {
             case OAUTH_MAIL_PERMISSION_MISSING -> "El proveedor no concedió los permisos de correo necesarios. Vuelve a iniciar sesión y autoriza el acceso al buzón y el envío.";
-            case SMTP_CONNECTION_FAILED -> "No se pudo conectar o autorizar el envío. Revisa que la cuenta permita SMTP con OAuth y que el puerto 587 esté disponible.";
             case CANCELLED -> "La operación fue cancelada.";
             case LOCAL_TIMEOUT, NETWORK_TIMEOUT, OAUTH_TIMEOUT -> "La operación superó el tiempo de espera.";
             case REAUTH_REQUIRED, OAUTH_INVALID_CREDENTIALS, OAUTH_TOKEN_EXPIRED -> "Vuelve a autorizar tu cuenta.";
@@ -28,6 +30,25 @@ public record OperationError(ErrorCode code, String message) {
             default -> "No se pudo completar la operación de correo.";
         };
         return new OperationError(code, message);
+    }
+
+    private static String smtpMessage(Exception failure) {
+        var seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Throwable, Boolean>());
+        for (Throwable cause = failure; cause != null && seen.add(cause); cause = cause.getCause()) {
+            if (cause instanceof jakarta.mail.AuthenticationFailedException)
+                return "El servidor rechazó la autorización para enviar. Revisa los permisos de correo y que la cuenta permita SMTP con OAuth.";
+            if (cause instanceof jakarta.mail.NoSuchProviderException)
+                return "Falta el componente SMTP en esta instalación de Evermail.";
+            if (cause instanceof java.net.UnknownHostException)
+                return "No se pudo localizar el servidor de envío. Revisa tu conexión a Internet y la configuración DNS.";
+            if (cause instanceof javax.net.ssl.SSLException)
+                return "No se pudo establecer una conexión segura con el servidor de envío. Revisa la fecha del equipo y la conexión.";
+            if (cause instanceof java.net.SocketTimeoutException)
+                return "El servidor de envío superó el tiempo de espera al conectar.";
+            if (cause instanceof java.net.ConnectException)
+                return "No se pudo conectar al servidor SMTP. Revisa si la red permite conexiones salientes al puerto 587.";
+        }
+        return "No se pudo conectar o autorizar el envío. Revisa la conexión y el acceso SMTP con OAuth de tu cuenta.";
     }
 
     private static String inboxMessage(Exception failure, ErrorCode code) {

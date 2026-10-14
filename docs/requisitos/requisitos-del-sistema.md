@@ -11,6 +11,13 @@
 
 ## 1. Propósito y uso
 
+**Actualización de alcance, 11 de octubre de 2026:** el MVP se destina al uso
+personal. El usuario acepta posponer el cumplimiento de RNF-09; sus cifras
+siguen siendo objetivos, no garantías. Confirmó Google, restauración de sesión
+y paginación. Microsoft personal continúa pendiente de resolver y verificar.
+El instalador y el ejecutable nativo se aplazan por petición posterior del usuario.
+La evidencia vigente se registra en [aceptación del MVP](../pruebas/aceptacion-mvp.md).
+
 Definir qué debe permitir Evermail, qué queda fuera de esta versión y cómo
 comprobar su funcionamiento. Este documento guía la implementación de la interfaz,
 la selección de pruebas y la aceptación del MVP. No es una descripción de clases
@@ -40,7 +47,8 @@ con almacenamiento local protegido parcialmente mediante cifrado.
 | Almacén de claves del sistema operativo | Protege las claves locales por cuenta |
 
 La aplicación se comunica directamente con los proveedores mediante OAuth2 e
-IMAP/SMTP; no requiere un servidor intermediario propio. El entorno objetivo
+IMAP/SMTP; las imágenes externas se obtienen mediante el proxy de Azure configurado.
+El entorno objetivo
 actual es Windows con Java 21 y JavaFX. Otros sistemas operativos no se consideran
 validados. El acceso remoto requiere conexión, una cuenta compatible y la
 configuración correspondiente del proveedor.
@@ -120,7 +128,10 @@ alternativa legible en texto. No se exige reproducción idéntica de toda planti
 
 **Aceptación:** los mensajes solo de texto se leen normalmente; los mensajes con
 HTML permitido conservan su formato compatible. No se ejecutan scripts ni se
-descargan imágenes externas automáticamente. Los recursos incompatibles se omiten
+descargan recursos directamente desde el WebView. Con el proxy configurado,
+las imágenes externas se solicitan después de mostrar el cuerpo y se incorporan
+como datos raster validados. Un fallo de imágenes conserva el cuerpo legible.
+Los recursos incompatibles se omiten
 o se representan de forma segura. Un mensaje que excede los límites admitidos
 produce un error recuperable, sin bloquear la aplicación.
 

@@ -18,6 +18,46 @@ import org.w3c.dom.events.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SafeMailBodyTest {
+    @Test void secondStageReplacesPlaceholderWithDecodedImageInWebView() throws Exception {
+        CountDownLatch ready = new CountDownLatch(1);
+        try { Platform.startup(() -> { Platform.setImplicitExit(false); ready.countDown(); }); }
+        catch (IllegalStateException started) { ready.countDown(); }
+        assertTrue(ready.await(10, TimeUnit.SECONDS));
+        var bytes = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, 1), "png", bytes);
+        String data = "data:image/png;base64," + Base64.getEncoder().encodeToString(bytes.toByteArray());
+        UUID id = UUID.randomUUID();
+        var firstContent = new MailContent(id, "Readable", "<p>Readable</p><img src='https://origin.invalid/p'>", true, false, List.of());
+        var finalContent = new MailContent(id, "Readable", "<p>Readable</p><img src='" + data + "'>", false, false, List.of());
+        var service = new MailPresentationService();
+        var first = service.prepareWithoutImages(firstContent, Deadline.after(Duration.ofSeconds(5)));
+        var complete = service.prepareWithoutImages(finalContent, Deadline.after(Duration.ofSeconds(5)));
+        var rendered = new java.util.concurrent.LinkedBlockingQueue<WebView>();
+        SafeMailBody body = fx(() -> {
+            var view = new SafeMailBody(uri -> {}, message -> {});
+            view.getChildren().addListener((javafx.collections.ListChangeListener<javafx.scene.Node>) change -> {
+                if (view.getChildren().getFirst() instanceof WebView web) rendered.add(web);
+            });
+            view.show(first, BodyMode.HTML);
+            return view;
+        });
+        try {
+            WebView initial = rendered.poll(5, TimeUnit.SECONDS);
+            assertNotNull(initial);
+            fx(() -> { assertEquals(0, initial.getEngine().getDocument().getElementsByTagName("img").getLength()); return null; });
+            fx(() -> { body.show(complete, BodyMode.HTML); return null; });
+            WebView enhanced = rendered.poll(5, TimeUnit.SECONDS);
+            assertNotNull(enhanced);
+            fx(() -> {
+                assertFalse(enhanced.getEngine().isJavaScriptEnabled());
+                assertEquals(1, enhanced.getEngine().getDocument().getElementsByTagName("img").getLength());
+                // Trusted test-only inspection; sender JavaScript remains disabled.
+                assertEquals(2, ((Number) enhanced.getEngine().executeScript("document.images[0].naturalWidth")).intValue());
+                return null;
+            });
+        } finally { fx(() -> { body.clear(); return null; }); }
+    }
+
     private static <T> T fx(Callable<T> work) throws Exception {
         FutureTask<T> task = new FutureTask<>(work); Platform.runLater(task); return task.get(10,TimeUnit.SECONDS);
     }

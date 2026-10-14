@@ -2,7 +2,13 @@ module com.juanpablo.evermail {
     requires javafx.controls;
     requires javafx.fxml;
     requires javafx.web;
+    requires com.sun.jna;
+    requires com.sun.jna.platform;
     requires org.jsoup;
+    requires com.helger.css;
+    requires com.helger.commons;
+    // ph-css/ph-commons are automatic modules and cannot declare this named runtime dependency.
+    requires org.slf4j;
     requires java.xml;
 
     requires jakarta.mail;

@@ -29,6 +29,9 @@ public class MailSessionProvider implements MailGateway {
         properties.setProperty("mail.imaps.ssl.enable", "true");
         properties.setProperty("mail.imaps.ssl.checkserveridentity", "true");
         properties.setProperty("mail.imaps.peek", "true");
+        // Fewer round trips for HTML bodies; keep bounded partial reads and skip attachments.
+        properties.setProperty("mail.imaps.partialfetch", "true");
+        properties.setProperty("mail.imaps.fetchsize", "131072");
         timeouts(properties, "imaps", timeoutMillis);
         return properties;
     }
@@ -236,6 +239,10 @@ public class MailSessionProvider implements MailGateway {
                 if (message == null || message.isExpunged()) {
                     throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Message no longer exists in inbox");
                 }
+                FetchProfile profile = new FetchProfile();
+                profile.add(FetchProfile.Item.CONTENT_INFO);
+                profile.add(FetchProfile.Item.ENVELOPE);
+                folder.fetch(new Message[]{message}, profile);
                 RemoteMailContent content = HybridMime.extract(message, deadline);
                 deadline.check();
                 return content;

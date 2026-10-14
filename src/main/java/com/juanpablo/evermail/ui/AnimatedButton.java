@@ -10,6 +10,9 @@ public final class AnimatedButton extends Button {
     private final ScaleTransition motion = new ScaleTransition(Duration.millis(130), this);
 
     public AnimatedButton() {
+        graphicProperty().addListener((o, before, after) -> {
+            if (after instanceof MailIcon icon) icon.matchTextColor(this);
+        });
         motion.setInterpolator(Interpolator.EASE_OUT);
         hoverProperty().addListener((o, before, after) -> animate());
         pressedProperty().addListener((o, before, after) -> animate());

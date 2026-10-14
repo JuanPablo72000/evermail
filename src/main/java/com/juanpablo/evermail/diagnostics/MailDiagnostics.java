@@ -22,6 +22,7 @@ public final class MailDiagnostics {
                 var gateway = new MailSessionProvider(backend.getAuth(), backend.getAccounts());
                 for (var account : accounts) {
                     System.out.println("PROVIDER=" + account.getProvider());
+                    System.out.println("SMTP_HOST=" + account.getProvider().getSmtpHost(account.getProviderSubject()));
                     check("TOKEN_REFRESH", () -> {
                         var config = new EnvConfig().loadProvider(account.getProvider());
                         var previous = backend.getAccounts().readCredentials(account.getId());
@@ -60,7 +61,10 @@ public final class MailDiagnostics {
         for (Throwable cause = failure; cause != null && seen.add(cause); cause = cause.getCause()) {
             String message = Objects.toString(cause.getMessage(), "").toUpperCase(Locale.ROOT);
             for (String marker : List.of("AUTHENTICATIONFAILED", "INVALID CREDENTIALS", "IMAP ACCESS IS DISABLED",
-                    "APPLICATION-SPECIFIC PASSWORD REQUIRED", "AUTHENTICATED BUT NOT CONNECTED", "5.7.139", "5.7.3")) {
+                    "APPLICATION-SPECIFIC PASSWORD REQUIRED", "AUTHENTICATED BUT NOT CONNECTED", "5.7.139", "5.7.3",
+                    "SMTPCLIENTAUTHENTICATION IS DISABLED", "AUTHENTICATED SMTP", "BASIC AUTHENTICATION IS DISABLED",
+                    "USER IS LOCKED", "ACCOUNT IS BLOCKED", "REQUEST DID NOT MEET THE CRITERIA",
+                    "AUTHENTICATION UNSUCCESSFUL", "TOKEN EXPIRED", "INVALID TOKEN")) {
                 if (message.contains(marker)) System.out.println("SERVER_MARKER=" + marker);
             }
         }

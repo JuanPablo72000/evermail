@@ -7,8 +7,9 @@
 .reader-toolbar .action-button { -fx-font-size: 0.9em; -fx-pref-width: 10.5em; -fx-min-height: 3.7222em; }
 .action-button .mail-icon { -fx-min-width: 2.77778em; -fx-pref-width: 2.77778em; -fx-max-width: 2.77778em; -fx-min-height: 2.77778em; -fx-pref-height: 2.77778em; -fx-max-height: 2.77778em; }
 .reader-sender { -fx-font-size: 1.8em; }
-.reader-meta { -fx-hgap: 1.05em; -fx-vgap: 0.5em; -fx-alignment: center-left; }
+.reader-meta { -fx-spacing: 0.8em; -fx-alignment: center-left; }
 .reader-meta .small, .reader-recipient { -fx-font-size: 1em; }
+.reader-date { -fx-font-size: 1.35em; -fx-alignment: center-right; -fx-text-alignment: right; -fx-padding: 0.4em 0; }
 .reader-details { -fx-hgap: 1em; -fx-vgap: 0.5em; }
 .reader-formats { -fx-hgap: 2em; -fx-vgap: 0.4em; -fx-alignment: center-right; }
 .reader-formats .button { -fx-pref-width: 6.66667em; -fx-pref-height: 2.08333em; }

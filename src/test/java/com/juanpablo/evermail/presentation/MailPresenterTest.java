@@ -112,6 +112,43 @@ class MailPresenterTest {
         assertEquals(1, backend.contents.size());
     }
 
+    @Test void bodyIsReadableWhileImagesArePendingAndLateImagesCannotReplaceAnotherMail() {
+        backend.enhanceImages = true;
+        inbox(mail(1), mail(2)); presenter.openMail(mail(1).getId());
+        backend.headers.getLast().complete(mail(1)); flush(); body(mail(1).getId(), true);
+        assertEquals(ReaderPhase.READY, presenter.state().reader().phase());
+        var first = presenter.state().reader().content();
+        var pending = backend.images.getLast();
+        presenter.showText();
+        pending.complete(first); flush();
+        assertEquals(BodyMode.TEXT, presenter.state().reader().mode());
+        presenter.openMail(mail(1).getId());
+        backend.headers.getLast().complete(mail(1)); flush(); body(mail(1).getId(), true);
+        pending = backend.images.getLast();
+        presenter.openMail(mail(2).getId());
+        assertTrue(pending.cancelled);
+        pending.complete(first); flush();
+        assertEquals(mail(2).getId(), presenter.state().reader().mailId());
+        assertNull(presenter.state().reader().content());
+    }
+
+    @Test void failedImagesKeepReadableBodyAndLogoutRejectsTheirLateCompletion() {
+        backend.enhanceImages = true;
+        inbox(mail(1)); presenter.openMail(mail(1).getId());
+        backend.headers.getLast().complete(mail(1)); flush(); body(mail(1).getId(), true);
+        var first = presenter.state().reader().content();
+        backend.images.getLast().fail(ErrorCode.NETWORK_TIMEOUT); flush();
+        assertSame(first, presenter.state().reader().content());
+        assertEquals(ReaderPhase.READY, presenter.state().reader().phase());
+        presenter.openMail(mail(1).getId());
+        backend.headers.getLast().complete(mail(1)); flush(); body(mail(1).getId(), true);
+        var pending = backend.images.getLast();
+        presenter.requestLogout(); presenter.confirmLogout();
+        assertTrue(pending.cancelled);
+        pending.complete(first); flush();
+        assertNull(presenter.state().reader().content());
+    }
+
     @Test void plainOnlyMailCannotSwitchToNonexistentHtml() {
         inbox(mail(1)); presenter.openMail(mail(1).getId());
         backend.headers.getLast().complete(mail(1)); flush(); body(mail(1).getId(), false);
@@ -259,6 +296,14 @@ class MailPresenterTest {
         List<InboxAction> actions = new ArrayList<>();
         List<Pending<MailHeader>> headers = new ArrayList<>();
         List<Pending<MailPresentation>> contents = new ArrayList<>();
+        boolean enhanceImages;
+        List<Pending<MailPresentation>> images = new ArrayList<>();
+        public Optional<OperationHandle<MailPresentation>> images(MailContent content) {
+            if (!enhanceImages) return Optional.empty();
+            var pending = new Pending<MailPresentation>(session.version());
+            images.add(pending);
+            return Optional.of(pending);
+        }
         List<Pending<SendResult>> sends = new ArrayList<>();
         List<UUID> submissions = new ArrayList<>();
         InboxCursor lastCursor;

@@ -70,6 +70,75 @@ class MailWindowTest {
         }
     }
 
+    @Test void optionalRecipientsRevealIndependentlyAndResetAfterSending() throws Exception {
+        ready();
+        fx(() -> {
+            assertFalse(field("ccField").isManaged());
+            assertFalse(field("bccField").isManaged());
+            double initialMessageHeight = field("messageField").getHeight();
+            button("bccButton").fire();
+            assertTrue(field("bccField").isVisible());
+            assertTrue(node("bccLabel").isManaged());
+            assertFalse(field("ccField").isManaged());
+            assertEquals(3, javafx.scene.layout.GridPane.getRowIndex(field("bccField")));
+            button("ccButton").fire();
+            assertTrue(field("ccField").isManaged());
+            assertTrue(node("recipientActions").isManaged());
+            assertTrue(button("ccButton").isVisible());
+            assertTrue(button("bccButton").isVisible());
+            assertTrue(field("messageField").getHeight() < initialMessageHeight);
+            field("toField").setText("recipient@example.com");
+            field("ccField").setText("copy@example.com");
+            field("bccField").setText("hidden@example.com");
+            field("messageField").setText("Draft");
+            button("sendButton").fire();
+            backend.send.complete(new SendResult(backend.submission,DeliveryState.RECORDED,UUID.randomUUID(),null));
+            return null;
+        });
+        fx(() -> {
+            assertFalse(field("ccField").isManaged());
+            assertFalse(field("bccField").isManaged());
+            assertTrue(button("ccButton").isVisible());
+            assertTrue(button("bccButton").isVisible());
+            return null;
+        });
+    }
+
+    @Test void inboxRowFitsCellAndHoverKeepsRoundedBackground() throws Exception {
+        ready();
+        fx(() -> {
+            var list = (ListView<?>)node("mailList");
+            list.getSelectionModel().select(0);
+            var row = (javafx.scene.layout.Region)list.lookup(".mail-row");
+            row.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("hover"), true);
+            window.root().applyCss(); window.root().layout();
+            var cell = (ListCell<?>)list.lookup(".list-cell:filled");
+            assertTrue(row.getWidth() <= cell.getWidth() - cell.getInsets().getLeft() - cell.getInsets().getRight() + 1);
+            assertTrue(row.getBackground().getFills().getFirst().getRadii().getTopLeftHorizontalRadius() > 0);
+            assertEquals(javafx.scene.paint.Color.web("#505050"), row.getBackground().getFills().getFirst().getFill());
+            for (Node child : list.lookupAll(".scroll-bar")) {
+                ScrollBar bar = (ScrollBar)child;
+                if (bar.getOrientation() == javafx.geometry.Orientation.HORIZONTAL) assertFalse(bar.isVisible());
+            }
+            FxmlViewsTest.save(window.root().snapshot(null, null), "runtime-inbox-hover.png");
+            return null;
+        });
+    }
+
+    @Test void dismissedBannerStaysHiddenDuringDraftEditsAndReturnsForNewError() throws Exception {
+        ready();
+        fx(() -> {
+            assertTrue(node("operationBanner").isVisible());
+            button("dismissBanner").fire();
+            field("messageField").setText("Draft");
+            assertFalse(node("operationBanner").isManaged());
+            button("refreshButton").fire();
+            backend.inbox.result.complete(OperationResult.failure(new OperationError(ErrorCode.CANCELLED,"Actualización cancelada")));
+            return null;
+        });
+        fx(() -> { assertTrue(node("operationBanner").isVisible()); return null; });
+    }
+
     @Test void uncertainSendLocksFormAndDoesNotResubmit() throws Exception {
         ready();
         fx(() -> {
@@ -85,6 +154,26 @@ class MailWindowTest {
         });
     }
 
+    @Test void transparentLogoutCancelsWithEscapeWithoutLosingDraft() throws Exception {
+        ready();
+        fx(() -> { field("messageField").setText("Keep this draft"); button("logoutButton").fire(); return null; });
+        fx(() -> {
+            Stage dialog = (Stage)Window.getWindows().stream().filter(w -> w instanceof Stage s && s.getTitle().equals("Cerrar sesión")).findFirst().orElseThrow();
+            assertEquals(StageStyle.TRANSPARENT, dialog.getStyle());
+            assertEquals(javafx.scene.paint.Color.TRANSPARENT, dialog.getScene().getFill());
+            assertTrue(dialog.getWidth() <= 571);
+            Parent content = dialog.getScene().getRoot(); content.applyCss(); content.layout();
+            var snapshot = content.snapshot(null, null);
+            assertEquals(0, snapshot.getPixelReader().getColor(5, 5).getOpacity(), 0.01);
+            FxmlViewsTest.save(snapshot, "runtime-logout-transparent.png");
+            content.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,"","",KeyCode.ESCAPE,false,false,false,false));
+            assertFalse(dialog.isShowing());
+            assertEquals("Keep this draft",field("messageField").getText());
+            assertNull(backend.logout);
+            return null;
+        });
+    }
+
     @Test void logoutClearsHiddenDraftUndoHistoryAndRejectsLateReaderContent() throws Exception {
         ready();
         TextInputControl draft = fx(() -> { TextInputControl value = field("messageField"); value.replaceText(0,0,"PRIVATE_DRAFT"); return value; });
@@ -97,6 +186,8 @@ class MailWindowTest {
         fx(() -> {
             Stage dialog = (Stage)Window.getWindows().stream().filter(w -> w instanceof Stage s && s.getTitle().equals("Cerrar sesión")).findFirst().orElseThrow();
             dialog.getScene().getRoot().applyCss();
+            dialog.getScene().getRoot().layout();
+            FxmlViewsTest.save(dialog.getScene().getRoot().snapshot(null, null), "runtime-logout.png");
             ((Button)dialog.getScene().lookup("#confirmLogoutButton")).fire();
             assertEquals("",draft.getText()); draft.undo(); assertEquals("",draft.getText());
             backend.content.complete(new MailPresentation(new MailContent(mail.getId(),"LATE_PRIVATE_BODY",List.of()),null));

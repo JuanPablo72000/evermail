@@ -37,11 +37,16 @@ public final class CoordinatedPresentationBackend implements PresentationBackend
     public OperationHandle<MailPresentation> content(UUID mailId) {
         return coordinator.submit(AppConstants.CONTENT_BUDGET, (b, a, d) -> {
             MailContent content = b.inbox().loadContent(a.getId(), mailId, d);
-            MailPresentation presentation = new MailPresentationService().prepare(content, d);
+            MailPresentation presentation = new MailPresentationService().prepareWithoutImages(content, d);
             b.inbox().markRead(a.getId(), mailId);
             d.check();
             return presentation;
         });
+    }
+    public Optional<OperationHandle<MailPresentation>> images(MailContent content) {
+        if (content.getHtml() == null) return Optional.empty();
+        return Optional.of(coordinator.submit(AppConstants.CONTENT_BUDGET,
+                (b, a, d) -> new MailPresentationService().prepare(content, d)));
     }
     public OperationHandle<SendResult> send(UUID submissionId, ComposeDraft draft) {
         return coordinator.submit(AppConstants.SEND_BUDGET,

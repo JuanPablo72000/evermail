@@ -13,6 +13,15 @@ public final class MailIcon extends StackPane {
         setKind(kind);
     }
     public String getKind() { return kind; }
+    /** Tint the original raster's alpha mask with the button's current text color. */
+    void matchTextColor(javafx.scene.control.Button button) {
+        if (!kind.equals("logout")) return;
+        var color = new javafx.scene.effect.ColorInput();
+        color.widthProperty().bind(image.widthProperty());
+        color.heightProperty().bind(image.heightProperty());
+        color.paintProperty().bind(button.textFillProperty());
+        image.setEffect(new javafx.scene.effect.Blend(javafx.scene.effect.BlendMode.SRC_ATOP, null, color));
+    }
     public void setKind(String value) {
         kind = value;
         String file = switch (value) {

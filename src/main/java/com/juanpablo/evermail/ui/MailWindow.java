@@ -30,7 +30,8 @@ public final class MailWindow {
     private final View login = load("Login-Screen.fxml"), loading = load("Loading-Screen.fxml"),
             main = load("Main-Screen.fxml"), reader = load("Reader-Screen.fxml");
     private final Label status = new Label(), sendStatus = new Label(), readerStatus = new Label();
-    private final FlowPane banner = new FlowPane(12, 8);
+    private final BorderPane banner = new BorderPane();
+    private final Button dismissBanner = new AnimatedButton();
     private final Button retry = new AnimatedButton(), authorize = new AnimatedButton(), cancelLogin = new AnimatedButton();
     private final ListView<MailHeader> list;
     private final SafeMailBody body;
@@ -41,6 +42,8 @@ public final class MailWindow {
     private long version = -1;
     private Route route;
     private List<MailHeader> displayed = List.of();
+    private String bannerKey = "", dismissedBannerKey;
+    private boolean draftHadContent;
 
     public MailWindow(Stage stage, PresentationBackend backend, Consumer<URI> browser, Runnable exit) {
         this.stage = stage; this.browser = browser; this.exit = exit;
@@ -51,7 +54,14 @@ public final class MailWindow {
         authorize.setId("reauthorize"); authorize.setText("Volver a autorizar");
         cancelLogin.setId("cancelLogin"); cancelLogin.setText("Cancelar autorización");
         banner.getStyleClass().add("operation-banner");
-        banner.getChildren().addAll(status,retry,authorize,cancelLogin); root.setTop(banner);
+        banner.setId("operationBanner");
+        banner.setCenter(new FlowPane(12, 8, status, retry, authorize, cancelLogin));
+        dismissBanner.setId("dismissBanner"); dismissBanner.setText("×");
+        dismissBanner.setAccessibleText("Cerrar aviso de sesión");
+        dismissBanner.setTooltip(new Tooltip("Cerrar aviso"));
+        dismissBanner.getStyleClass().add("banner-close");
+        banner.setRight(dismissBanner); root.setTop(banner);
+        dismissBanner.setOnAction(e -> { dismissedBannerKey = bannerKey; visible(banner, false); });
         sendStatus.setWrapText(true); sendStatus.setId("sendStatus");
         readerStatus.setWrapText(true); readerStatus.setId("readerStatus");
         ((VBox)main.node("compose")).getChildren().add(1, sendStatus);
@@ -84,8 +94,6 @@ public final class MailWindow {
         main.button("loadMoreButton").setOnAction(e -> presenter.loadMore());
         main.button("sendButton").setOnAction(e -> presenter.send());
         main.button("discardButton").setOnAction(e -> presenter.requestDiscard());
-        main.button("ccButton").setOnAction(e -> main.field("ccField").requestFocus());
-        main.button("bccButton").setOnAction(e -> main.field("bccField").requestFocus());
         for (String field : List.of("toField","ccField","bccField","subjectField","messageField"))
             main.field(field).textProperty().addListener((o,a,b) -> {
                 if (!rendering && !closing) presenter.editDraft(new ComposeDraft(main.field("toField").getText(),
@@ -149,7 +157,12 @@ public final class MailWindow {
             if (route == Route.INBOX && next.inbox().error() != null) message = next.inbox().error().message() + " Se conserva la copia local.";
             if (route == Route.READER && next.reader().error() != null) message = next.reader().error().message();
             status.setText(message);
-            visible(banner, !message.isEmpty() || retry.isVisible() || authorize.isVisible() || cancelLogin.isVisible());
+            String key = next.session().version() + ":" + next.session().phase() + ":" + message
+                    + ":" + retry.isVisible() + authorize.isVisible() + cancelLogin.isVisible();
+            if (!key.equals(bannerKey)) dismissedBannerKey = null;
+            bannerKey = key;
+            visible(banner, !key.equals(dismissedBannerKey)
+                    && (!message.isEmpty() || retry.isVisible() || authorize.isVisible() || cancelLogin.isVisible()));
             loading.label("loadingMessage").setText(route == Route.RECOVERY ? "No se pudo iniciar Evermail"
                     : next.session().phase() == SessionSnapshot.Phase.LOGGING_OUT ? "Cerrando sesión…" : "Iniciando tu experiencia de Correo");
             loading.label("loadingDetail").setText(route == Route.RECOVERY ? "Puedes reintentar sin borrar tus datos." : "Preparando el almacenamiento y la sesión…");
@@ -185,6 +198,8 @@ public final class MailWindow {
     }
     private void renderCompose(Compose compose) {
         ComposeDraft draft = compose.draft();
+        if (draft.isEmpty() && draftHadContent && compose.phase() == SendPhase.SENT) resetRecipients();
+        draftHadContent = !draft.isEmpty();
         String[] names = {"toField","ccField","bccField","subjectField","messageField"};
         String[] values = {draft.to(),draft.cc(),draft.bcc(),draft.subject(),draft.message()};
         for (int i=0;i<names.length;i++) {
@@ -201,6 +216,9 @@ public final class MailWindow {
         };
         sendStatus.setText(message); visible(sendStatus,!message.isEmpty());
     }
+    private void resetRecipients() {
+        ComposeController.of(main.node("compose")).reset();
+    }
     private void renderReader(Reader data) {
         MailHeader header = data.header();
         reader.label("readerSubject").setText(header == null ? "Cargando correo…" : "Asunto: " + header.getSubject());
@@ -214,7 +232,8 @@ public final class MailWindow {
         String message = data.error() != null ? data.error().message()
                 : data.phase() == ReaderPhase.HEADER_LOADING ? "Cargando encabezado…"
                 : data.phase() == ReaderPhase.CONTENT_LOADING ? "Cargando contenido…"
-                : data.content() != null && data.content().getContent().isBlockedRemoteImages() ? "Imágenes externas bloqueadas por privacidad." : "";
+                : data.imagesLoading() ? "Cargando imágenes… Ya puedes leer el correo."
+                : data.content() != null && data.content().getContent().isBlockedRemoteImages() ? "Algunas imágenes no están disponibles. Comprueba la conexión y la configuración del proxy." : "";
         readerStatus.setText(message); visible(readerStatus,!message.isEmpty());
         body.show(data.content(),data.mode());
     }
@@ -225,6 +244,7 @@ public final class MailWindow {
             body.clear(); displayed = List.of(); list.getItems().clear(); list.getSelectionModel().clearSelection();
             for (View view : List.of(main,reader)) for (String id : List.of("accountName","accountEmail","accountAvatar")) view.label(id).setText("");
             for (String id : List.of("fromField","toField","ccField","bccField","subjectField","messageField","searchField")) main.field(id).clear();
+            resetRecipients(); draftHadContent = false;
             for (String id : List.of("readerSubject","senderName","senderEmail","senderAvatar","sentAt","recipients")) reader.label(id).setText("");
             sendStatus.setText(""); readerStatus.setText("");
         } finally { rendering = previous; }
@@ -233,8 +253,10 @@ public final class MailWindow {
     private void confirmIfRequested() {
         if (state.logoutConfirmation()) {
             View view = load("Logout-Dialog.fxml");
-            Stage dialog = dialog("Cerrar sesión",view.root,560,540);
+            Stage dialog = dialog("Cerrar sesión",view.root,570,550,true);
             view.button("cancelButton").setOnAction(e -> { dismissConfirmation(); presenter.cancelLogout(); });
+            view.button("cancelButton").setCancelButton(true);
+            view.button("cancelButton").requestFocus();
             view.button("confirmLogoutButton").setOnAction(e -> { dismissConfirmation(); presenter.confirmLogout(); });
             dialog.setOnCloseRequest(e -> { e.consume(); dismissConfirmation(); presenter.cancelLogout(); });
         } else if (state.compose().discardConfirmation()) {
@@ -247,14 +269,23 @@ public final class MailWindow {
             VBox content = new VBox(18,message,new FlowPane(12,8,cancel,accept)); content.getStyleClass().add("confirmation-content");
             Stage dialog = dialog("Descartar correo",content,460,220);
             cancel.setOnAction(e -> { dismissConfirmation(); presenter.cancelDiscard(); });
-            accept.setOnAction(e -> { dismissConfirmation(); presenter.confirmDiscard(); });
+            accept.setOnAction(e -> { dismissConfirmation(); presenter.confirmDiscard(); resetRecipients(); });
             dialog.setOnCloseRequest(e -> { e.consume(); dismissConfirmation(); presenter.cancelDiscard(); });
         }
     }
     private Stage dialog(String title, Parent content, double width, double height) {
+        return dialog(title, content, width, height, false);
+    }
+    private Stage dialog(String title, Parent content, double width, double height, boolean transparent) {
         Stage dialog = new Stage(); dialog.initOwner(stage); dialog.initModality(Modality.WINDOW_MODAL);
+        WindowAppearance.install(dialog);
+        if (transparent) { dialog.initStyle(StageStyle.TRANSPARENT); dialog.setResizable(false); }
         dialog.setTitle(title); dialog.setMinWidth(360); dialog.setMinHeight(220);
-        Scene scene = new Scene(content,width,height); scene.getStylesheets().add(root.getStylesheets().getFirst());
+        var screens = Screen.getScreensForRectangle(stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight());
+        var bounds = (screens.isEmpty() ? Screen.getPrimary() : screens.getFirst()).getVisualBounds();
+        Scene scene = new Scene(content,Math.min(width, bounds.getWidth() - 40),Math.min(height, bounds.getHeight() - 90));
+        if (transparent) scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
+        scene.getStylesheets().add(root.getStylesheets().getFirst());
         dialog.setScene(scene); confirmation = dialog;
         dialog.setOnHidden(e -> {
             if (suppressDialogClose || closing) return;
@@ -262,7 +293,14 @@ public final class MailWindow {
             if (state.logoutConfirmation()) presenter.cancelLogout();
             else if (state.compose().discardConfirmation()) presenter.cancelDiscard();
         });
-        dialog.show(); return dialog;
+        dialog.show();
+        if (transparent) {
+            double centerX = stage.isShowing() ? stage.getX() + stage.getWidth() / 2 : bounds.getMinX() + bounds.getWidth() / 2;
+            double centerY = stage.isShowing() ? stage.getY() + stage.getHeight() / 2 : bounds.getMinY() + bounds.getHeight() / 2;
+            dialog.setX(Math.max(bounds.getMinX(), Math.min(centerX - dialog.getWidth() / 2, bounds.getMaxX() - dialog.getWidth())));
+            dialog.setY(Math.max(bounds.getMinY(), Math.min(centerY - dialog.getHeight() / 2, bounds.getMaxY() - dialog.getHeight())));
+        }
+        return dialog;
     }
     private void dismissConfirmation() {
         if (confirmation == null) return;

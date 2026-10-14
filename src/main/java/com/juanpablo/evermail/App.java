@@ -17,6 +17,7 @@ public class App extends Application {
     private MailWindow window;
     @Override
     public void start(Stage stage) throws Exception {
+        com.juanpablo.evermail.ui.WindowAppearance.install(stage);
         String preview = getParameters().getNamed().get("preview");
         if (preview == null) {
             window = new MailWindow(stage, new CoordinatedPresentationBackend(new ApplicationCoordinator()),
