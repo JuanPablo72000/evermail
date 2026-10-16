@@ -43,7 +43,7 @@ public final class SafeMailBody extends StackPane {
         engine.getLoadWorker().stateProperty().addListener((o, old, state) -> {
             if (!htmlActive) return;
             if (state == Worker.State.SUCCEEDED) {
-                timeout.stop(); attachLinks(); getChildren().setAll(web);
+                timeout.stop(); updateBody(); attachLinks(); getChildren().setAll(web);
             } else if (state == Worker.State.FAILED) fallback();
         });
         timeout.setOnFinished(e -> fallback());
@@ -52,6 +52,13 @@ public final class SafeMailBody extends StackPane {
 
     public void show(MailPresentation presentation, BodyMode requestedMode) {
         if (current == presentation && mode == requestedMode) return;
+        if (current != null && presentation != null && htmlActive && mode == BodyMode.HTML
+                && requestedMode == BodyMode.HTML && presentation.getDocument() != null
+                && current.getContent().getMailId().equals(presentation.getContent().getMailId())) {
+            current = presentation;
+            if (web.getEngine().getLoadWorker().getState() == Worker.State.SUCCEEDED) updateBody();
+            return;
+        }
         clear();
         current = presentation; mode = requestedMode;
         if (presentation == null) return;
@@ -63,6 +70,54 @@ public final class SafeMailBody extends StackPane {
         }
     }
 
+    private void updateBody() {
+        var doc = web.getEngine().getDocument();
+        if (doc == null || current == null || current.getBody() == null) return;
+        Node body = doc.getElementsByTagName("body").item(0);
+        if (body != null) patch(body, current.getBody());
+    }
+
+    /** Patch the existing document; no navigation, JavaScript or full-page reload per batch. */
+    private void patch(Node node, MailPresentation.DisplayNode desired) {
+        var pending = new java.util.ArrayDeque<DomPatch>();
+        pending.add(new DomPatch(node, desired));
+        while (!pending.isEmpty()) {
+            var next = pending.removeFirst();
+            patchNode(next.node(), next.desired(), pending);
+        }
+    }
+    private record DomPatch(Node node, MailPresentation.DisplayNode desired) { }
+    private void patchNode(Node node, MailPresentation.DisplayNode desired, java.util.ArrayDeque<DomPatch> pending) {
+        if (desired.tag() == null) {
+            if (!java.util.Objects.equals(node.getNodeValue(), desired.text())) node.setNodeValue(desired.text());
+            return;
+        }
+        Element element = (Element) node;
+        var attrs = element.getAttributes();
+        for (int i = attrs.getLength() - 1; i >= 0; i--) {
+            String name = attrs.item(i).getNodeName();
+            if (!desired.attributes().containsKey(name)) element.removeAttribute(name);
+        }
+        desired.attributes().forEach((name, value) -> {
+            if (!value.equals(element.getAttribute(name))) element.setAttribute(name, value);
+        });
+        int index = 0;
+        for (var child : desired.children()) {
+            Node existing = node.getChildNodes().item(index++);
+            boolean matches = existing != null && (child.tag() == null
+                    ? existing.getNodeType() == Node.TEXT_NODE
+                    : existing instanceof Element && existing.getNodeName().equalsIgnoreCase(child.tag()));
+            if (!matches) {
+                Node replacement = child.tag() == null ? node.getOwnerDocument().createTextNode(child.text())
+                        : node.getOwnerDocument().createElement(child.tag());
+                if (existing == null) node.appendChild(replacement); else node.replaceChild(replacement, existing);
+                existing = replacement;
+            }
+            pending.addLast(new DomPatch(existing, child));
+        }
+        while (node.getChildNodes().getLength() > index) node.removeChild(node.getLastChild());
+    }
+
     private void fallback() {
         htmlActive = false; timeout.stop(); web.getEngine().getLoadWorker().cancel();
         getChildren().setAll(text);
@@ -72,10 +127,10 @@ public final class SafeMailBody extends StackPane {
     private void attachLinks() {
         var doc = web.getEngine().getDocument();
         if (doc == null) return;
-        MailPresentation expected = current;
+        java.util.UUID expected = current.getContent().getMailId();
         ((EventTarget) doc).addEventListener("click", event -> {
             event.preventDefault();
-            if (!htmlActive || current == null || current != expected || doc != web.getEngine().getDocument()) return;
+            if (!htmlActive || current == null || !current.getContent().getMailId().equals(expected) || doc != web.getEngine().getDocument()) return;
             Node node = event.getTarget() instanceof Node value ? value : null;
             while (node instanceof Element element) {
                 String href = element.getAttribute("data-evermail-link");

@@ -22,6 +22,7 @@ public class BackendContext implements AutoCloseable {
     private final MailSendService sender;
     private final StartupService startup;
     private final LegacyImporter legacy;
+    private final MailGateway sessions;
 
     public BackendContext(Path database, KeyStoreService keys, OAuthGateway oauth, EnvConfig config) throws EvermailException {
         this(database, keys, oauth, config, MailSessionProvider::new);
@@ -38,7 +39,6 @@ public class BackendContext implements AutoCloseable {
         mails = new MailRepository(transactions, accounts, security, keys);
         outbox = new OutboxRepository(transactions, accounts, keys, security);
         auth = new AuthService(accounts, keys, oauth, config, coordinator, Clock.systemUTC());
-        MailGateway sessions;
         try {
             sessions = java.util.Objects.requireNonNull(gatewayFactory.apply(auth, accounts));
         } catch (RuntimeException failure) {
@@ -72,11 +72,16 @@ public class BackendContext implements AutoCloseable {
     @Override
     public void close() throws Exception {
         try {
-            transactions.close();
+            try { closeMailConnections(); }
+            finally { transactions.close(); }
         } finally {
             if (keys instanceof AutoCloseable resource) {
                 resource.close();
             }
         }
+    }
+
+    public void closeMailConnections() throws Exception {
+        if (sessions instanceof AutoCloseable resource) resource.close();
     }
 }

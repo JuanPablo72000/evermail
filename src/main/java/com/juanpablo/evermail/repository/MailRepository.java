@@ -166,6 +166,27 @@ public class MailRepository {
 
     private record StoredBody(String plainText, String html, boolean blockedRemoteImages, int imageReferencesVersion) { }
 
+    /** Desktop session cache only. Never touches accounts, credentials, sent mail or outbox. */
+    public void clearInboxCache() throws EvermailException {
+        transactions.write(c -> {
+            Sql.update(c, "DELETE FROM mail WHERE direction='INBOX'");
+            Sql.update(c, "DELETE FROM inbox_state");
+            return null;
+        });
+        // DELETE alone leaves the allocated pages on disk. Run outside a transaction.
+        transactions.read(c -> {
+            try (var statement = c.createStatement()) { statement.execute("VACUUM"); }
+            return null;
+        });
+    }
+
+    public void discardBody(UUID accountId, UUID mailId) throws EvermailException {
+        transactions.write(c -> {
+            Sql.update(c, "UPDATE mail SET body_cipher=NULL,body_format=0 WHERE id_account=? AND id_mail=? AND direction='INBOX'", accountId, mailId);
+            return null;
+        });
+    }
+
     public void remove(UUID accountId, UUID mailId) throws EvermailException {
         transactions.write(c -> {
             Sql.update(c, "DELETE FROM mail WHERE id_account=? AND id_mail=? AND direction='INBOX'", accountId, mailId);

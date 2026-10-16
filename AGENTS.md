@@ -69,6 +69,17 @@ Esta propuesta fue solicitada para futuras sesiones; no está implementada. La c
 
 # Contexto de implementación consolidado
 
+## Actualización del 15 de octubre de 2026: descarga y limpieza por sesión
+
+- El usuario cambió la política de cierre: cerrar la ventana debe limpiar la caché de bandeja y sus marcas locales de visto. Confirmó que no se cambian marcas ni mensajes de Gmail/Outlook. Esta decisión prevalece sobre la propuesta anterior de conservar 50 correos entre ejecuciones.
+- `BackendAccess.from` limpia la bandeja al iniciar (también recupera restos de cierres forzados) y al cerrar, después de esperar al trabajador. Conserva cuentas, claves, enviados y registros de envío pendientes. `MailRepository.clearInboxCache` elimina la bandeja y compacta SQLite; un error se propaga, no se anuncia éxito.
+- `ApplicationCoordinator` precarga cuerpos uno a uno tras REFRESH/MORE, con hasta 100 identificadores pendientes, sin marcar vistos. Las operaciones solicitadas tienen prioridad entre cuerpos; la descarga ya activa puede retrasar la apertura. Una actualización sustituye los pendientes antiguos; un fallo de red detiene la cola hasta otra carga de bandeja.
+- La caché de cuerpos de sesión se limita a 100 cuerpos por servicio; se retira contenido manteniendo encabezados. Esto no implementa todavía el administrador del límite total de 2 GB (aplicación, datos y espacio de operación), que sigue pendiente.
+- `MailSessionProvider` reutiliza una conexión IMAP exclusiva, con vencimiento de inactividad de 30 s y temporizadores por generación. Se descarta tras error, cambio de credencial, acceso/cierre de sesión o cierre del backend. No se comparten objetos de correo concurrentemente.
+- Las imágenes se solicitan al abrir el mensaje, mediante un grupo reutilizable de tres trabajadores. Un trabajador de presentación separado evita bloquear cuerpos; los resultados llegan por finalización, en grupos de hasta tres o tras una espera de 150 ms. El visor actualiza el DOM saneado sin JavaScript ni recarga completa. No hay aún precarga ni caché persistente de imágenes externas.
+- El camino principal usa un trabajador de cuenta, uno de presentación y hasta tres de imágenes, además de JavaFX y los hilos internos de bibliotecas/temporizadores. No afirmar que el proceso completo tiene cinco hilos.
+- Mantener `.env` intacto. Estas mejoras no añaden variables de configuración. No prometer tiempos con proveedores reales a partir de pruebas con transportes simulados.
+
 ## Estado vigente del lector y validación
 
 - El lector entrega `prepareWithoutImages` primero y pide `PresentationBackend.images` después. El slot IMAGES se cancela al cambiar de correo/sesión; sus fallos conservan el cuerpo y su llegada respeta el modo texto. MailViewState.Reader.imagesLoading diferencia espera de error.

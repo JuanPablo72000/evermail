@@ -265,7 +265,77 @@ class ApplicationCoordinatorTest {
 
     @FunctionalInterface interface Hook { void run() throws Exception; }
 
+    @Test void imagePreparationDoesNotBlockForegroundAndCloseWaitsForIt() throws Exception {
+        ready();
+        CountDownLatch entered = gate(), release = gate();
+        var images = coordinator.present(Duration.ofSeconds(10), d -> {
+            entered.countDown(); awaitIgnoringInterrupts(release); return "images";
+        });
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        assertEquals("header", result(coordinator.submit(Duration.ofSeconds(1), (b, a, d) -> "header")).value());
+        var closing = coordinator.closeAsync().toCompletableFuture();
+        assertFalse(closing.isDone());
+        assertEquals(0, backend.closes.get());
+        release.countDown();
+        assertEquals(ErrorCode.CANCELLED, result(images).error().code());
+        assertTrue(closing.get(5, TimeUnit.SECONDS).succeeded());
+    }
+
+    @Test void foregroundRunsBetweenPrefetchedBodiesAndDuplicatesAreCoalesced() throws Exception {
+        ready();
+        CountDownLatch entered = gate(), release = gate(), finished = gate();
+        List<String> order = new CopyOnWriteArrayList<>();
+        UUID first = UUID.randomUUID(), second = UUID.randomUUID();
+        backend.testInbox = new InboxService(null, null, null) {
+            @Override public MailContent loadContent(UUID accountId, UUID id, Deadline deadline) {
+                assertEquals(account.getId(), accountId);
+                order.add(id.equals(first) ? "first" : "second");
+                if (id.equals(first)) {
+                    entered.countDown();
+                    try { awaitIgnoringInterrupts(release); } catch (Exception e) { throw new RuntimeException(e); }
+                } else finished.countDown();
+                return new MailContent(id, "body", null, false, false, List.of());
+            }
+        };
+        MailHeader one = prefetchHeader(first), two = prefetchHeader(second);
+        coordinator.prefetch(coordinator.session().version(), List.of(one, two, two));
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        var foreground = coordinator.submit(Duration.ofSeconds(1), (b, a, d) -> { order.add("foreground"); return null; });
+        release.countDown();
+        assertTrue(result(foreground).succeeded());
+        assertTrue(finished.await(5, TimeUnit.SECONDS));
+        assertEquals(List.of("first", "foreground", "second"), order);
+    }
+
+    @Test void logoutDropsQueuedPrefetchAndRejectsOldSessionPages() throws Exception {
+        ready();
+        CountDownLatch entered = gate(), release = gate();
+        AtomicInteger fetched = new AtomicInteger();
+        backend.testInbox = new InboxService(null, null, null) {
+            @Override public MailContent loadContent(UUID accountId, UUID id, Deadline deadline) {
+                fetched.incrementAndGet(); entered.countDown();
+                try { awaitIgnoringInterrupts(release); } catch (Exception e) { throw new RuntimeException(e); }
+                return null;
+            }
+        };
+        long version = coordinator.session().version();
+        var page = List.of(prefetchHeader(UUID.randomUUID()), prefetchHeader(UUID.randomUUID()));
+        coordinator.prefetch(version, page);
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        var logout = coordinator.logout();
+        coordinator.prefetch(version, page);
+        release.countDown();
+        assertTrue(result(logout).succeeded());
+        assertEquals(1, fetched.get());
+    }
+
+    private MailHeader prefetchHeader(UUID id) {
+        return new MailHeader(id, account.getId(), MailDirection.INBOX, new RemoteMailId(1, 1),
+                null, null, "sender@example.com", "Sender", "Subject", java.time.Instant.now(), false, false);
+    }
+
     private final class FakeBackend implements BackendAccess {
+        InboxService testInbox;
         StartupResult startup = new StartupResult(null, StartupStatus.LOGIN_REQUIRED);
         Hook startHook = () -> {}, loginHook = () -> {};
         Thread startThread, closeThread;
@@ -282,7 +352,7 @@ class ApplicationCoordinatorTest {
             if (logoutFails) throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "secret");
             loggedOut = id;
         }
-        public InboxService inbox() { throw new UnsupportedOperationException(); }
+        public InboxService inbox() { return Objects.requireNonNull(testInbox); }
         public MailSendService sender() { throw new UnsupportedOperationException(); }
         public void close() throws Exception {
             closeThread = Thread.currentThread(); closes.incrementAndGet();

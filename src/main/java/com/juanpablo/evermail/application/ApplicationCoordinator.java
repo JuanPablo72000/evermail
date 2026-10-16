@@ -19,6 +19,10 @@ public final class ApplicationCoordinator {
 
     private final BackendFactory factory;
     private final ExecutorService worker;
+    private final ExecutorService presentationWorker = Executors.newSingleThreadExecutor(
+            Thread.ofPlatform().daemon().name("evermail-presentation").factory());
+    private final LinkedHashSet<UUID> prefetch = new LinkedHashSet<>();
+    private UUID reading;
     private final int capacity;
     private final Set<Job<?>> pending = new HashSet<>();
     private final CompletableFuture<OperationResult<Void>> closed = new CompletableFuture<>();
@@ -40,6 +44,51 @@ public final class ApplicationCoordinator {
     }
 
     public SessionSnapshot session() { return session; }
+
+    public synchronized void prioritize(UUID mailId) { reading = mailId; prefetch.remove(mailId); }
+    public synchronized void readerReady(UUID mailId) {
+        if (Objects.equals(reading, mailId)) reading = null;
+        drainPrefetch();
+    }
+
+    /** Keep only identifiers waiting for I/O; foreground operations always drain first. */
+    public synchronized void prefetch(long version, List<MailHeader> headers) {
+        prefetch(version, headers, false);
+    }
+    public synchronized void prefetch(long version, List<MailHeader> headers, boolean refreshed) {
+        if (version != session.version() || session.phase() != READY) return;
+        if (refreshed) prefetch.clear();
+        for (MailHeader header : headers) {
+            if (prefetch.size() >= 100) break;
+            if (header.getAccountId().equals(session.account().getId())) prefetch.add(header.getId());
+        }
+        drainPrefetch();
+    }
+
+    private void drainPrefetch() {
+        if (session.phase() != READY || reading != null || pending.stream().anyMatch(job -> !job.presentation) || prefetch.isEmpty()) return;
+        UUID id = prefetch.removeFirst();
+        Account account = session.account();
+        enqueue(cancel -> {
+            backend.inbox().loadContent(account.getId(), id, Deadline.after(AppConstants.CONTENT_BUDGET));
+            return null;
+        }, result -> {
+            if (result.error() != null && result.error().code() != ErrorCode.MAIL_NOT_FOUND) prefetch.clear();
+        }, true);
+    }
+
+    @FunctionalInterface public interface PresentationOperation<T> { T run(Deadline deadline) throws Exception; }
+
+    /** CPU/image orchestration cannot access the database or block the account worker. */
+    public synchronized <T> OperationHandle<T> present(Duration budget, PresentationOperation<T> operation) {
+        if (!session.hasSession()) return unavailable();
+        if (pending.size() >= capacity) return busy();
+        Job<T> job = new Job<>(session.version(), cancel -> operation.run(Deadline.after(budget)), result -> {}, true);
+        job.presentation = true;
+        pending.add(job);
+        presentationWorker.execute(job);
+        return job;
+    }
 
     public synchronized OperationHandle<StartupResult> start() {
         if (session.phase() != NEW && session.phase() != FAILED) return unavailable();
@@ -105,9 +154,11 @@ public final class ApplicationCoordinator {
     public synchronized CompletionStage<OperationResult<Void>> closeAsync() {
         if (session.phase() == CLOSED) return closed.minimalCompletionStage();
         transition(CLOSED, null);
+        presentationWorker.shutdown();
         worker.execute(() -> {
             OperationResult<Void> result;
             try {
+                while (!presentationWorker.awaitTermination(1, TimeUnit.SECONDS)) { /* await cancelled I/O */ }
                 if (backend != null) backend.close();
                 result = OperationResult.success(null);
             } catch (Exception error) {
@@ -121,6 +172,8 @@ public final class ApplicationCoordinator {
 
     private void transition(SessionSnapshot.Phase phase, Account account) {
         session = new SessionSnapshot(phase, account, session.version() + 1);
+        prefetch.clear();
+        reading = null;
         pending.forEach(Job::requestCancellation);
     }
 
@@ -164,6 +217,7 @@ public final class ApplicationCoordinator {
         private Thread running;
         private boolean cancelled;
         private boolean finished;
+        private boolean presentation;
 
         Job(long version, Work<T> work, Finish<T> finish, boolean cancellable) {
             this.version = version; this.work = work; this.finish = finish; this.cancellable = cancellable;
@@ -203,6 +257,7 @@ public final class ApplicationCoordinator {
                 if (version == session.version() && session.phase() != CLOSED) finish.accept(result);
                 pending.remove(this);
                 finished = true;
+                drainPrefetch();
             }
             completion.complete(result);
         }

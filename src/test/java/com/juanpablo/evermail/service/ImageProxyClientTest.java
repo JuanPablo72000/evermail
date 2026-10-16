@@ -14,6 +14,41 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImageProxyClientTest {
+    @Test void publishesFastImageWhileFirstUrlIsStillBlocked() throws Exception {
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(3);
+        var caller = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var progress = new java.util.concurrent.CountDownLatch(1);
+        var slowEntered = new java.util.concurrent.CountDownLatch(1);
+        server.setExecutor(executor);
+        byte[] image = png();
+        server.createContext("/", exchange -> {
+            String request = new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            try {
+                if (request.contains("slow")) { slowEntered.countDown(); release.await(5, java.util.concurrent.TimeUnit.SECONDS); }
+                exchange.getResponseHeaders().set("Content-Type", "image/png");
+                exchange.sendResponseHeaders(200, image.length);
+                exchange.getResponseBody().write(image);
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            finally { exchange.close(); }
+        });
+        server.start();
+        try (var service = new MailPresentationService(new ImageProxyClient(
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort()), "test"))) {
+            var content = new MailContent(UUID.randomUUID(), "Body",
+                    "<img src='https://origin.invalid/slow'><img src='https://origin.invalid/fast'>", true, false, List.of());
+            var result = caller.submit(() -> service.prepare(content, Deadline.after(Duration.ofSeconds(10)), partial -> {
+                if (org.jsoup.Jsoup.parse(partial.getDocument()).select("img[src^=data:image/]").size() == 1) progress.countDown();
+            }));
+            assertTrue(slowEntered.await(3, java.util.concurrent.TimeUnit.SECONDS));
+            assertTrue(progress.await(3, java.util.concurrent.TimeUnit.SECONDS));
+            assertFalse(result.isDone());
+            release.countDown();
+            assertEquals(2, org.jsoup.Jsoup.parse(result.get(5, java.util.concurrent.TimeUnit.SECONDS).getDocument())
+                    .select("img[src^=data:image/]").size());
+        } finally { release.countDown(); server.stop(0); executor.shutdownNow(); caller.shutdownNow(); }
+    }
     private Deadline budget() { return Deadline.after(Duration.ofSeconds(5)); }
     private byte[] png() throws Exception {
         var output = new ByteArrayOutputStream();

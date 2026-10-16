@@ -16,20 +16,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class InboxFlowIntegrationTest {
     @TempDir Path directory;
 
-    @Test void startupShowsCacheBeforeRefreshAndMergesOverlappingUids() throws Exception {
+    @Test void startupClearsPreviousCacheAndRefreshKeepsCurrentSessionIds() throws Exception {
         try (var app = new IntegrationHarness(directory.resolve("inbox.db"))) {
             Account account = app.seed();
             var gate = new ScriptedMailGateway.Gate();
             app.gateway.latestGate = gate;
             app.presenter.start();
-            var cached = app.await(s -> s.inbox().items().size() == 50 && s.inbox().loading());
+            var cached = app.await(s -> s.inbox().loading() && s.inbox().stale());
             assertTrue(gate.entered.await(5, TimeUnit.SECONDS));
             assertEquals(SessionSnapshot.Phase.READY, cached.session().phase());
             assertEquals(account.getId(), cached.session().account().getId());
-            assertEquals(50, cached.inbox().items().getFirst().getRemoteId().getUid());
-            Map<Long, UUID> original = cached.inbox().items().stream().collect(Collectors.toMap(
-                    m -> m.getRemoteId().getUid(), MailHeader::getId));
-            assertEquals(50, app.count("mail"));
+            assertTrue(cached.inbox().items().isEmpty());
+            assertEquals(0, app.count("mail"));
 
             gate.release.countDown();
             var refreshed = app.await(s -> !s.inbox().loading());
@@ -39,16 +37,23 @@ class InboxFlowIntegrationTest {
             assertEquals(60, refreshed.inbox().items().getFirst().getRemoteId().getUid());
             assertEquals(11, refreshed.inbox().items().getLast().getRemoteId().getUid());
             assertEquals(50, refreshed.inbox().items().stream().map(MailHeader::getId).distinct().count());
-            refreshed.inbox().items().stream().filter(m -> original.containsKey(m.getRemoteId().getUid()))
-                    .forEach(m -> assertEquals(original.get(m.getRemoteId().getUid()), m.getId()));
-            assertEquals(60, app.count("mail"));
+            Map<Long, UUID> original = refreshed.inbox().items().stream().collect(Collectors.toMap(
+                    m -> m.getRemoteId().getUid(), MailHeader::getId));
+            app.presenter.refreshInbox();
+            var again = app.await(s -> !s.inbox().loading());
+            again.inbox().items().forEach(m -> assertEquals(original.get(m.getRemoteId().getUid()), m.getId()));
+            assertEquals(50, app.count("mail"));
         }
     }
 
     @Test void offlineRefreshKeepsCacheReadableAndRecoversWithoutChangingSession() throws Exception {
         try (var app = new IntegrationHarness(directory.resolve("offline.db"))) {
             Account account = app.seed();
-            MailHeader mail = app.context.getMails().readInbox(account.getId(), null, 50).getItems().getFirst();
+            var ready = app.startReady();
+            MailHeader mail = ready.inbox().items().getFirst();
+            app.presenter.openMail(mail.getId());
+            app.await(s -> s.reader().phase() == MailViewState.ReaderPhase.READY);
+            app.presenter.backToInbox();
             String body = "Private cached message for offline reading";
             app.context.getMails().saveContent(account.getId(), mail.getId(), new RemoteMailContent(body, List.of()));
             String cipher = app.context.getTransactions().read(c -> Sql.one(c,
@@ -56,7 +61,8 @@ class InboxFlowIntegrationTest {
             assertNotNull(cipher);
             assertFalse(cipher.contains(body));
             app.gateway.offline = true;
-            var offline = app.startReady();
+            app.presenter.refreshInbox();
+            var offline = app.await(s -> !s.inbox().loading());
             long sessionVersion = offline.session().version();
             assertNotNull(offline.inbox().error());
             assertTrue(offline.inbox().stale());
@@ -65,7 +71,6 @@ class InboxFlowIntegrationTest {
             app.presenter.openMail(mail.getId());
             var reader = app.await(s -> s.reader().phase() == MailViewState.ReaderPhase.READY);
             assertEquals(body, reader.reader().content().getContent().getPlainText());
-            assertEquals(0, app.gateway.bodyRequests.get());
             assertTrue(app.context.getMails().findHeader(account.getId(), mail.getId()).isRead());
 
             app.gateway.offline = false;
@@ -77,7 +82,7 @@ class InboxFlowIntegrationTest {
             assertEquals(sessionVersion, recovered.session().version());
             assertEquals(account.getId(), recovered.session().account().getId());
             assertEquals(60, recovered.inbox().items().getFirst().getRemoteId().getUid());
-            assertEquals(60, app.count("mail"));
+            assertEquals(50, app.count("mail"));
             assertEquals(mail.getId(), recovered.inbox().items().stream()
                     .filter(m -> m.getRemoteId().equals(mail.getRemoteId())).findFirst().orElseThrow().getId());
         }

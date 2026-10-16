@@ -11,6 +11,7 @@ public class InboxService {
     private final MailRepository mails;
     private final AccountCoordinator coordinator;
     private final java.util.function.BooleanSupplier imageProxyConfigured;
+    private final java.util.LinkedHashMap<UUID, UUID> retainedBodies = new java.util.LinkedHashMap<>(128, .75f, true);
 
     public InboxService(MailGateway gateway, MailRepository mails, AccountCoordinator coordinator) {
         this(gateway, mails, coordinator, () -> new ImageProxyClient(new EnvConfig()).configured());
@@ -91,6 +92,7 @@ public class InboxService {
                     }
                 }
             }
+            retainBody(accountId, mailId);
             return cached;
         }
         return coordinator.exclusive(accountId, deadline, () -> {
@@ -107,6 +109,7 @@ public class InboxService {
                 RemoteMailContent content = session.fetchContent(header.getRemoteId(), deadline);
                 deadline.check();
                 mails.saveContent(accountId, mailId, content);
+                retainBody(accountId, mailId);
                 deadline.check();
                 MailContent result = mails.readContent(accountId, mailId);
                 deadline.check();
@@ -122,5 +125,15 @@ public class InboxService {
 
     public void markRead(UUID accountId, UUID mailId) throws EvermailException {
         mails.markRead(accountId, mailId);
+    }
+
+    /** Bound session bodies to two pages; headers remain available for pagination. */
+    private synchronized void retainBody(UUID accountId, UUID mailId) throws EvermailException {
+        retainedBodies.put(mailId, accountId);
+        while (retainedBodies.size() > 100) {
+            var oldest = retainedBodies.firstEntry();
+            mails.discardBody(oldest.getValue(), oldest.getKey());
+            retainedBodies.remove(oldest.getKey());
+        }
     }
 }

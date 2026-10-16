@@ -169,7 +169,17 @@ public final class MailPresenter {
                 header = header.withRead(true);
                 items = items.stream().map(mail -> mail.getId().equals(id) ? mail.withRead(true) : mail).toList();
                 publish(); // The readable body reaches JavaFX before any proxy request.
-                backend.images(content.getContent()).ifPresent(task -> bind(Slot.IMAGES, task, images -> {
+                long imageVersion = version;
+                long readerRevision = revisions.get(Slot.READER);
+                backend.images(content.getContent(), partial -> dispatcher.execute(() -> {
+                    synchronized (MailPresenter.this) {
+                        if (disposed || backend.session().version() != imageVersion
+                                || !Objects.equals(selected, id) || revisions.get(Slot.READER) != readerRevision
+                                || !running.containsKey(Slot.IMAGES)) return;
+                        content = partial;
+                        publish();
+                    }
+                })).ifPresent(task -> bind(Slot.IMAGES, task, images -> {
                     // Failure leaves the readable body intact; bind rejects stale sessions/selections.
                     if (images.succeeded()) content = images.value();
                 }));
@@ -263,6 +273,7 @@ public final class MailPresenter {
     }
 
     private void clearReader() {
+        if (selected != null) backend.readerClosed(selected);
         selected = null; header = null; content = null; readerError = null;
         readerPhase = ReaderPhase.EMPTY; mode = BodyMode.TEXT;
     }

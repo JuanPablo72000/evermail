@@ -12,9 +12,12 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class MailSessionProvider implements MailGateway {
+public class MailSessionProvider implements MailGateway, AutoCloseable {
     private final AuthService auth;
     private final AccountRepository accounts;
+    private ImapInbox reusable;
+    private UUID reusableAccount;
+    private String reusableToken;
     private static final ScheduledExecutorService CLOSER = Executors.newScheduledThreadPool(2,
             Thread.ofPlatform().daemon().name("evermail-deadline-", 0).factory());
 
@@ -60,15 +63,23 @@ public class MailSessionProvider implements MailGateway {
     }
 
     @Override
-    public InboxSession openInbox(UUID accountId, Deadline deadline) throws EvermailException {
+    public synchronized InboxSession openInbox(UUID accountId, Deadline deadline) throws EvermailException {
         OAuthCredentials credentials = auth.ensureCredentials(accountId, deadline);
         Account account = accounts.require(accountId);
+        if (reusable != null && reusable.isLeased())
+            throw new SessionException(ErrorCode.LOCAL_TIMEOUT, "Inbox connection is already in use");
+        if (reusable != null && accountId.equals(reusableAccount)
+                && credentials.getAccessToken().equals(reusableToken) && reusable.borrow(deadline)) return reusable;
+        close();
         Store store = null;
         ScheduledFuture<?> closer = null;
+        java.util.concurrent.atomic.AtomicBoolean connecting = new java.util.concurrent.atomic.AtomicBoolean(true);
         try {
             store = Session.getInstance(imapProperties(deadline.remainingMillis())).getStore("imaps");
             Store toClose = store;
-            closer = CLOSER.schedule(() -> closeStore(toClose), deadline.remainingMillis(), TimeUnit.MILLISECONDS);
+            closer = CLOSER.schedule(() -> {
+                if (connecting.compareAndSet(true, false)) closeStore(toClose);
+            }, deadline.remainingMillis(), TimeUnit.MILLISECONDS);
             store.connect(account.getProvider().getImapHost(), account.getProvider().getImapPort(),
                     account.getEmail(), credentials.getAccessToken());
             Folder folder = store.getFolder("INBOX");
@@ -77,7 +88,16 @@ public class MailSessionProvider implements MailGateway {
                 throw new MessagingException("Server has no UID support");
             }
             deadline.check();
-            return new ImapInbox(store, folder, uidFolder, closer);
+            if (!connecting.compareAndSet(true, false)) throw new MessagingException("Connection deadline elapsed");
+            closer.cancel(false);
+            // A connect timeout may already be running: never reuse a store it could still close.
+            deadline.check();
+            ImapInbox opened = new ImapInbox(store, folder, uidFolder);
+            if (!opened.borrow(deadline)) throw new MessagingException("Inbox connection unavailable");
+            reusable = opened;
+            reusableAccount = accountId;
+            reusableToken = credentials.getAccessToken();
+            return opened;
         } catch (Exception e) {
             if (closer != null) {
                 closer.cancel(false);
@@ -88,6 +108,13 @@ public class MailSessionProvider implements MailGateway {
             }
             throw new MailFetchException(ErrorCode.IMAP_CONNECTION_FAILED, "Unable to connect to inbox", e);
         }
+    }
+
+    @Override public synchronized void close() {
+        if (reusable != null) reusable.dispose();
+        reusable = null;
+        reusableAccount = null;
+        reusableToken = null;
     }
 
     @Override
@@ -136,17 +163,56 @@ public class MailSessionProvider implements MailGateway {
         }
     }
 
-    private static final class ImapInbox implements InboxSession {
+    static final class ImapInbox implements InboxSession {
         private final Store store;
         private final Folder folder;
         private final UIDFolder uids;
-        private final ScheduledFuture<?> closer;
+        private ScheduledFuture<?> closer;
+        private long generation;
+        private boolean leased;
+        private boolean broken;
+        private final ScheduledExecutorService scheduler;
 
-        private ImapInbox(Store store, Folder folder, UIDFolder uids, ScheduledFuture<?> closer) {
+        private ImapInbox(Store store, Folder folder, UIDFolder uids) {
+            this(store, folder, uids, CLOSER);
+        }
+        ImapInbox(Store store, Folder folder, UIDFolder uids, ScheduledExecutorService scheduler) {
             this.store = store;
             this.folder = folder;
             this.uids = uids;
-            this.closer = closer;
+            this.scheduler = scheduler;
+        }
+        synchronized boolean isLeased() { return leased; }
+
+        synchronized boolean borrow(Deadline deadline) throws EvermailException {
+            deadline.check();
+            // Do not perform a NOOP/health check while holding the timer monitor.
+            // A disconnected transport is invalidated by the next bounded fetch.
+            if (broken || leased) return false;
+            leased = true;
+            arm(deadline.remainingMillis());
+            return true;
+        }
+
+        private synchronized void arm(long millis) {
+            if (closer != null) closer.cancel(false);
+            long ticket = ++generation;
+            closer = scheduler.schedule(() -> {
+                synchronized (ImapInbox.this) {
+                    if (ticket != generation || broken) return;
+                    broken = true; // Mark unavailable before releasing the monitor and closing I/O.
+                }
+                closeStore(store);
+            }, millis, TimeUnit.MILLISECONDS);
+        }
+
+        void dispose() {
+            synchronized (this) {
+                broken = true;
+                ++generation;
+                if (closer != null) closer.cancel(false);
+            }
+            closeStore(store);
         }
 
         @Override
@@ -252,14 +318,21 @@ public class MailSessionProvider implements MailGateway {
         }
 
         private EvermailException fetchError(Exception e) {
+            synchronized (this) { broken = true; }
             return e instanceof EvermailException domain ? domain
                     : new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Inbox operation failed", e);
         }
 
         @Override
         public void close() {
-            closer.cancel(false);
-            closeStore(store);
+            synchronized (this) {
+                leased = false;
+                if (!broken && !Thread.currentThread().isInterrupted()) {
+                    arm(30_000); // Idle connection expires without polling.
+                    return;
+                }
+            }
+            dispose();
         }
     }
 

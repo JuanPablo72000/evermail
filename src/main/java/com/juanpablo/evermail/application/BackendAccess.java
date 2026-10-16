@@ -20,14 +20,28 @@ public interface BackendAccess extends AutoCloseable {
     /** Transfers ownership of an assembled context to this adapter. */
     static BackendAccess from(BackendContext context) {
         return new BackendAccess() {
-            public StartupResult start(Deadline deadline) throws Exception { return context.getStartup().start(deadline); }
+            private boolean initialized;
+            public StartupResult start(Deadline deadline) throws Exception {
+                StartupResult result = context.getStartup().start(deadline);
+                initialized = true;
+                context.getMails().clearInboxCache(); // Also recover cache left by a forced shutdown.
+                return result;
+            }
             public Account login(OAuthProvider provider, CancellationToken cancellation) throws Exception {
+                context.closeMailConnections();
                 return context.getAuth().login(provider, cancellation);
             }
-            public void logout(UUID accountId, Deadline deadline) throws Exception { context.getAuth().logout(accountId, deadline); }
+            public void logout(UUID accountId, Deadline deadline) throws Exception {
+                context.closeMailConnections();
+                context.getAuth().logout(accountId, deadline);
+            }
             public InboxService inbox() { return context.getInbox(); }
             public MailSendService sender() { return context.getSender(); }
-            public void close() throws Exception { context.close(); }
+            public void close() throws Exception {
+                try {
+                    if (initialized) context.getMails().clearInboxCache();
+                } finally { context.close(); }
+            }
         };
     }
 }

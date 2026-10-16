@@ -12,14 +12,34 @@ import static org.junit.jupiter.api.Assertions.*;
 class SessionFlowIntegrationTest {
     @TempDir Path directory;
 
+    @Test void closingWindowClearsInboxButKeepsAccountAndKey() throws Exception {
+        Path database = directory.resolve("close.db");
+        com.juanpablo.evermail.model.Account account;
+        com.juanpablo.evermail.support.BackendFixture.MemoryKeys keys;
+        try (var app = new IntegrationHarness(database)) {
+            account = app.seed(); keys = app.keys;
+            var ready = app.startReady();
+            app.presenter.openMail(ready.inbox().items().getFirst().getId());
+            app.await(s -> s.reader().phase() == MailViewState.ReaderPhase.READY);
+        }
+        assertTrue(keys.values.containsKey(account.getKeyRef()));
+        try (var db = new com.juanpablo.evermail.repository.TransactionManager(
+                new com.juanpablo.evermail.repository.SqliteConnectionProvider(database))) {
+            assertEquals(0L, db.read(c -> com.juanpablo.evermail.dao.Sql.one(c,
+                    "SELECT COUNT(*) FROM mail WHERE direction='INBOX'", r -> r.getLong(1))).longValue());
+            assertEquals(1L, db.read(c -> com.juanpablo.evermail.dao.Sql.one(c,
+                    "SELECT COUNT(*) FROM account", r -> r.getLong(1))).longValue());
+        }
+    }
+
     @Test void logoutClearsPresentationAndDiscardsLateBodyBeforeDeletingLocalAccount() throws Exception {
         try (var app = new IntegrationHarness(directory.resolve("logout.db"))) {
             var account = app.seed();
-            var ready = app.startReady();
             var gate = new ScriptedMailGateway.Gate();
             app.gateway.contentGate = gate;
+            var ready = app.startReady();
             app.presenter.openMail(ready.inbox().items().getFirst().getId());
-            app.await(s -> s.reader().phase() == MailViewState.ReaderPhase.CONTENT_LOADING);
+            app.await(s -> s.reader().phase() == MailViewState.ReaderPhase.HEADER_LOADING);
             assertTrue(gate.entered.await(5, TimeUnit.SECONDS));
             app.presenter.requestLogout();
             app.presenter.confirmLogout();

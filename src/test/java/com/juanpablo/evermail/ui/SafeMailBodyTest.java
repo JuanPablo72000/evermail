@@ -45,9 +45,19 @@ class SafeMailBodyTest {
             WebView initial = rendered.poll(5, TimeUnit.SECONDS);
             assertNotNull(initial);
             fx(() -> { assertEquals(0, initial.getEngine().getDocument().getElementsByTagName("img").getLength()); return null; });
-            fx(() -> { body.show(complete, BodyMode.HTML); return null; });
-            WebView enhanced = rendered.poll(5, TimeUnit.SECONDS);
-            assertNotNull(enhanced);
+            var loaded = new CompletableFuture<Void>();
+            fx(() -> {
+                var document = initial.getEngine().getDocument();
+                body.show(complete, BodyMode.HTML);
+                assertSame(document, initial.getEngine().getDocument(), "Image batches must preserve the document");
+                var image = document.getElementsByTagName("img").item(0);
+                ((EventTarget) image).addEventListener("load", event -> loaded.complete(null), false);
+                if (((Number) initial.getEngine().executeScript("document.images[0].naturalWidth")).intValue() == 2)
+                    loaded.complete(null);
+                return null;
+            });
+            loaded.get(5, TimeUnit.SECONDS);
+            WebView enhanced = initial;
             fx(() -> {
                 assertFalse(enhanced.getEngine().isJavaScriptEnabled());
                 assertEquals(1, enhanced.getEngine().getDocument().getElementsByTagName("img").getLength());
