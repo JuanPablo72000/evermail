@@ -1,22 +1,23 @@
-# Servicios finales
+# Servicios y adaptadores de infraestructura
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
+    class BackendContext {
+        +create() BackendContext
+        +closeMailConnections() void
+        +close() void
+    }
     class StartupService {
         +start(Deadline deadline) StartupResult
     }
     class AuthService {
         +login(OAuthProvider provider, CancellationToken cancel) Account
         +restoreSession(Deadline deadline) StartupResult
-        +ensureCredentials(UUID accountId, Deadline deadline) OAuthCredentials
-        +logout(UUID accountId) void
-        +recoverAccountLifecycle() void
-    }
-    class MailSessionProvider {
-        +openInbox(UUID accountId, Deadline deadline) InboxSession
-        +openSmtp(UUID accountId, Deadline deadline) SmtpSession
+        +ensureCredentials(UUID id, Deadline deadline) OAuthCredentials
+        +logout(UUID id, Deadline deadline) void
+        +recoverAccountLifecycle(Deadline deadline) void
     }
     class InboxService {
         +readCached(UUID accountId, InboxCursor cursor) InboxPage
@@ -24,6 +25,7 @@ classDiagram
         +loadMore(UUID accountId, InboxCursor cursor, Deadline deadline) InboxPage
         +openHeader(UUID accountId, UUID mailId) MailHeader
         +loadContent(UUID accountId, UUID mailId, Deadline deadline) MailContent
+        +reloadContent(UUID accountId, UUID mailId, Deadline deadline) MailContent
         +markRead(UUID accountId, UUID mailId) void
     }
     class ComposeService {
@@ -31,77 +33,133 @@ classDiagram
     }
     class MailSendService {
         +send(ComposeRequest request, Deadline deadline) SendResult
-        +recover(UUID accountId) void
+        +recover(UUID accountId, Deadline deadline) void
     }
     class AccountCoordinator {
-        +runExclusive(UUID accountId, AccountWork work) Object
-        +beginLogout(UUID accountId) void
+        +exclusive(UUID accountId, Deadline deadline, Work work) Object
     }
+    class MailGateway {
+        <<interface>>
+        +openInbox(UUID accountId, Deadline deadline) InboxSession
+        +openSmtp(UUID accountId, Deadline deadline) SmtpSession
+    }
+    BackendContext --> StartupService
+    BackendContext --> AuthService
+    BackendContext --> InboxService
+    BackendContext --> MailSendService
+    BackendContext --> MailGateway
     StartupService --> DatabaseMigrator
+    StartupService --> LegacyImporter
+    StartupService --> AccountRepository
     StartupService --> AuthService
     StartupService --> MailSendService
-    AuthService --> OAuthClient
     AuthService --> AccountRepository
     AuthService --> KeyStoreService
-    MailSessionProvider --> AuthService
-    MailSessionProvider --> ProviderConfig
-    InboxService --> MailSessionProvider
-    InboxService --> MailRepository
-    InboxService ..> MimeUtil
-    ComposeService ..> EmailValidator
-    MailSendService --> ComposeService
-    MailSendService --> MailSessionProvider
-    MailSendService --> OutboxRepository
+    AuthService --> OAuthGateway
     AuthService --> AccountCoordinator
+    InboxService --> MailGateway
+    InboxService --> MailRepository
     InboxService --> AccountCoordinator
+    MailSendService --> MailGateway
+    MailSendService --> OutboxRepository
+    MailSendService --> ComposeService
     MailSendService --> AccountCoordinator
 ```
 
-## Sesión y arranque
+## Por qué se separan estas piezas
 
-StartupService prepara SQLite, recupera operaciones locales y devuelve estado antes del presupuesto de 5 s cuando el entorno lo permite; al agotarlo muestra un estado de recuperación/carga, nunca una sesión ficticia. La renovación de red no impide abrir una caché disponible; OFFLINE lo comunica.
+Los servicios coordinan casos de uso; los repositorios deciden cómo persistirlos. Las interfaces `MailGateway` y `OAuthGateway` permiten sustituir red por transportes simulados en pruebas. `BackendContext` construye los colaboradores compartidos y se ocupa de cerrar transporte, SQLite y almacén de claves.
 
-OAuthClient implementa Authorization Code + PKCE y state, navegador externo y callback loopback. Valida emisor, audiencia, expiración y firma del ID token con claves del proveedor. El callback solo completa la operación con state correcto y código/error válido; peticiones ajenas no consumen el intento. Cierra servidor al finalizar/cancelar.
+`AccountCoordinator.exclusive` mantiene un bloqueo por cuenta durante toda la operación suministrada, incluida la red cuando el servicio la realiza dentro del bloque. No es un planificador de prioridad. `ApplicationCoordinator`, descrito aparte, organiza el trabajo de la sesión y la precarga. Esta distinción explica por qué añadir hilos no garantiza que una apertura adelante a una descarga activa.
 
-La identidad estable usa issuer + sub. Una reautorización reutiliza accountId y key_ref. Si falta refresh_token conserva el anterior de esa identidad; para una cuenta nueva exige consentimiento que lo proporcione o falla sin activar la cuenta.
+## Autenticación y claves
 
-Alta: persistir PROVISIONING con UUID y key_ref; crear clave externa; cifrar y activar. Si falla se compensan clave/fila. El arranque recupera PROVISIONING incompletos, sin mostrarlos como sesiones válidas.
+```mermaid
+classDiagram
+    class OAuthGateway {
+        <<interface>>
+        +authorize(ProviderConfig config, CancellationToken cancel) AuthorizationResult
+        +refresh(config, previous, deadline) OAuthCredentials
+    }
+    class KeyStoreService {
+        <<interface>>
+        +create(String keyRef) void
+        +read(String keyRef) SecretKey
+        +delete(String keyRef) void
+    }
+    OAuthGateway <|.. OAuthClient
+    OAuthClient --> OidcTokenValidator
+    KeyStoreService <|.. OsKeyStoreService
+    OsKeyStoreService --> SecurityUtil
+```
 
-La renovación se serializa por cuenta y vuelve a comprobar expiración tras obtener el turno; usa margen de 60 s. Fallos de red permiten caché offline; rechazo de autorización cambia a REAUTH_REQUIRED.
+OAuth obtiene autorización y una identidad validada. El almacén del sistema conserva las claves usadas para cifrar datos locales; esos dos tipos de credencial tienen ciclos de vida diferentes. Véase [persistencia y seguridad](../persistencia-y-seguridad.md).
 
-Logout bloquea nuevas operaciones y marca DISCONNECTING. Cancela descargas/renovaciones y espera cierre del trabajador SMTP o lo clasifica UNKNOWN antes de liberar recursos. Elimina la clave externa de forma idempotente y después los datos locales; un fallo conserva DISCONNECTING para reintentar limpieza en el próximo arranque. No se promete revocación remota de permisos OAuth.
+## Transporte de correo
 
-## Bandeja y lectura
+```mermaid
+classDiagram
+    class InboxSession {
+        <<interface>>
+        +fetchLatest(int size, Deadline deadline) RemoteInboxPage
+        +fetchBefore(InboxCursor cursor, int size, Deadline deadline) RemoteInboxPage
+        +fetchContent(RemoteMailId id, Deadline deadline) RemoteMailContent
+        +close() void
+    }
+    class SmtpSession {
+        <<interface>>
+        +submit(OutboxMessage outgoing, Deadline deadline) Outcome
+        +close() void
+    }
+    MailGateway <|.. MailSessionProvider
+    MailSessionProvider --> AuthService
+    MailSessionProvider --> AccountRepository
+    MailSessionProvider ..> InboxSession
+    MailSessionProvider ..> SmtpSession
+    InboxSession <|.. ImapInbox
+    SmtpSession <|.. SmtpTransport
+    ImapInbox ..> HybridMime
+```
 
-InboxSession usa IMAPS, propiedades mail.imaps.*, XOAUTH2, validación TLS, timeouts y cierre determinista. No descarga todo el buzón: usa UID, rangos y fetch de metadatos.
+`ImapInbox` y `SmtpTransport` son clases anidadas de `MailSessionProvider`. `Outcome` pertenece a `SmtpSession` y distingue ACCEPTED, REJECTED y UNKNOWN. La conexión IMAP se presta exclusivamente y se conserva hasta 30 s de inactividad; sus temporizadores llevan generación para evitar cierres de un préstamo posterior. SMTP usa STARTTLS y OAuth; IMAP usa TLS, READ_ONLY y PEEK.
 
-readCached no hace red. refresh trae los 50 más recientes, conserva cuerpos existentes y reconcilia los UID del intervalo visible. loadMore consulta una página local completa o recupera hasta 50 UID inferiores al cursor; confirma cobertura solo tras completar la página. Los nuevos mensajes no desplazan el cursor de páginas anteriores. Un UIDVALIDITY distinto invalida cursores y obliga a refrescar.
+## Preparación del correo
 
-openHeader lee caché; loadContent lee primero el cuerpo local y, si falta, obtiene el mensaje por UID. HybridMime conserva HTML/texto y resuelve imágenes CID acotadas; no descarga adjuntos ordinarios ni imágenes remotas. reloadContent permite recuperar formato explícitamente conservando texto antiguo durante aperturas normales. Si el mensaje dejó de existir informa MAIL_NOT_FOUND y actualiza caché. La lectura se marca localmente al mostrar contenido. MailPresentationService prepara HTML seguro bajo el mismo Deadline.
+```mermaid
+classDiagram
+    class MailPresentationService {
+        +prepareWithoutImages(MailContent content, Deadline deadline) MailPresentation
+        +prepare(MailContent content, Deadline deadline) MailPresentation
+        +prepare(content, deadline, progress) MailPresentation
+        +close() void
+    }
+    class ImageProxyClient {
+        +configured() boolean
+        +download(String url, Deadline deadline) String
+    }
+    MailPresentationService --> ImageProxyClient
+    MailPresentationService ..> HtmlMail
+    MailPresentationService ..> MailPresentation
+    ImageProxyClient ..> InlineImages
+```
 
-## Envío y recuperación
+`MailPresentationService` prepara un primer cuerpo sin imágenes externas y después resuelve recursos por un grupo reutilizable de tres trabajadores. Publica avances por finalización; `ImageProxyClient` es el único descargador de imágenes externas del mensaje. No existe precarga persistente de esas imágenes.
 
-ComposeService exige destinatarios válidos y resuelve duplicados antes de guardar o conectar. SmtpSession usa XOAUTH2 y STARTTLS obligatorio con validación de servidor. El mensaje y Message-ID se construyen una vez por submissionId.
+## Estados duraderos del envío
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING : preparar transaccion local
-    PENDING --> SENDING : claim atomico
-    SENDING --> ACCEPTED : SMTP confirma entrega
-    SENDING --> FAILED : rechazo definitivo sin entrega
-    SENDING --> UNKNOWN : desconexion o timeout ambiguo
-    ACCEPTED --> RECORDED : guardar SENT en transaccion
+    [*] --> PENDING : preparar intento
+    PENDING --> SENDING : autenticar y reclamar
+    SENDING --> ACCEPTED : servidor acepta y se persiste
+    SENDING --> FAILED : rechazo confirmado
+    SENDING --> UNKNOWN : incertidumbre o recuperacion
+    ACCEPTED --> RECORDED : registrar SENT
     RECORDED --> [*]
     FAILED --> [*]
     UNKNOWN --> [*]
 ```
 
-FAILED solo se utiliza si se sabe que no hubo entrega a ningún destinatario. Aceptación parcial o pérdida de respuesta después de transmitir datos produce UNKNOWN. SmtpSession deshabilita envío parcial cuando el servidor rechaza destinatarios antes de DATA; aun así trata respuestas ambiguas sin reenviar.
+La aceptación significa que el servidor SMTP aceptó el envío, no que llegó a la bandeja del destinatario. Si falla la persistencia tras SMTP, la fila puede quedar SENDING aunque el resultado devuelto sea UNKNOWN. El diagrama muestra estados guardados; [envío y recuperación](../envio-y-recuperacion.md) explica esa diferencia y los reintentos.
 
-No se devuelve ACCEPTED sin persistir esa confirmación. Si la confirmación SMTP llegó pero falla el guardado local, se informa resultado incierto/local pendiente y no se repite SMTP. Tras reiniciar, SENDING se convierte en UNKNOWN; ACCEPTED se registra localmente sin enviar otra vez. PENDING solo continúa mediante una acción explícita. UNKNOWN nunca se reintenta automáticamente. No es posible garantizar exactamente una entrega entre SMTP y SQLite.
-
-El presupuesto de envío es 4 s. Agotarlo actualiza la interfaz y solicita interrupción/cierre del transporte; no libera el bloqueo del intento mientras siga activo el trabajador ni presupone que el servidor no recibió el mensaje.
-
-## Ejecución
-
-Todos los servicios son síncronos, sin JavaFX. Deadline es un plazo absoluto compartido: cada paso usa el tiempo restante, no reinicia el presupuesto. AccountWork abrevia una función genérica; AccountCoordinator no mantiene transacciones SQL durante red. El planificador permite que una lectura de caché no espere a una sincronización de red; la exclusión se aplica a renovación, envío, logout y confirmaciones de cambios incompatibles.
+Fuente: [paquete service](../../../src/main/java/com/juanpablo/evermail/service).

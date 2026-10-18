@@ -1,6 +1,6 @@
-# Modelo entidad-relación final
+# Modelo entidad-relación de SQLite
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia revisada el 17 de octubre de 2026 frente a `schema.sql` y `DatabaseMigrator`. Representa las seis tablas del esquema activo, versión 2; las tablas `legacy_*` conservadas durante una migración no se mezclan con este modelo.
 
 ```mermaid
 erDiagram
@@ -72,35 +72,37 @@ erDiagram
     outbox_message |o--o| mail : produce_enviado
 ```
 
-## Claves, nulabilidad y restricciones
+## Qué representa cada tabla
 
-- Todas las PK UUID se generan antes de persistir. provider_subject identifica al usuario mediante issuer + sub; no se usa el correo mutable como identidad. UNIQUE(provider, provider_subject).
-- account: display_name y tokens/expiración admiten NULL durante PROVISIONING o DISCONNECTING. ACTIVE exige access_token_cipher, refresh_token_cipher y token_expires_at no nulos. REAUTH_REQUIRED puede conservar los tokens anteriores para recuperar la cuenta.
-- inbox_state puede no existir hasta la primera sincronización. uid_validity es obligatorio; los límites oldest/newest y last_synced_at son NULL hasta disponer de un intervalo sincronizado. Los UID usan enteros de 64 bits positivos.
-- mail: direction, sender_email, occurred_at e is_read son obligatorios. subject se normaliza a cadena vacía. sender_name, message_id y body_cipher son opcionales. body_cipher NULL significa contenido aún no descargado. body_format=0 conserva texto cifrado previo; body_format=1 cifra un sobre con plainText, html y blockedRemoteImages. La migración 1→2 conserva cuerpos existentes.
-- INBOX exige remote_uid y uid_validity positivos y outbound_id NULL. UNIQUE(id_account, uid_validity, remote_uid) WHERE direction = 'INBOX'.
-- SENT exige outbound_id no nulo y remote_uid/uid_validity NULL. Cada outbox produce como máximo un Mail; ambos deben pertenecer a la misma cuenta. Esta pertenencia y la dirección se verifican dentro de la transacción de registro.
-- outbox_message exige cuerpo, asunto, message_id y fechas; last_error_code es opcional. Un registro listo para envío tiene al menos un destinatario, condición comprobada en la transacción de creación.
-- Las parejas PK de destinatarios impiden repetir una dirección en distintos roles. Antes de enviar se rechaza la misma dirección con roles diferentes; repeticiones dentro del mismo rol se consolidan. Al importar correo se consolida con precedencia TO, CC, BCC.
-- address_key normaliza espacios exteriores y dominio con reglas IDN, conservando el local-part. No elimina puntos ni sufijos '+' ni presupone reglas de Gmail para todos los dominios.
-- Los booleanos llevan CHECK IN (0,1); provider, direction, status, state y recipient_type usan CHECK con los valores indicados.
-- Todas las FK dependientes de account usan ON DELETE CASCADE; las filas de destinatarios también. mail.outbound_id usa ON DELETE RESTRICT: un registro de envío no se elimina mientras lo referencia un correo, salvo limpieza completa de cuenta coordinada.
-- Índices: mail(id_account, direction, remote_uid DESC), outbox_message(id_account, state, created_at). Todos los filtros de caché incluyen id_account.
+| Tabla            | Responsabilidad                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| account          | Identidad local, estado y tokens cifrados; `key_ref` referencia una clave externa. |
+| inbox_state      | Intervalo de UID que se ha inspeccionado y si quedan páginas remotas.              |
+| mail             | Encabezados INBOX o SENT y cuerpo cifrado opcional.                                |
+| mail_recipient   | Destinatarios del correo local, incluido nombre cuando está disponible.            |
+| outbox_message   | Intento de envío y estado duradero para evitar repeticiones inseguras.             |
+| outbox_recipient | Destinatarios del intento; esta tabla no almacena `display_name`.                  |
 
-## Persistencia y privacidad
+## Restricciones físicas y reglas de aplicación
 
-SQLite almacena tokens, cuerpos de correo y contenido pendiente de envío cifrados con AES-256-GCM. La clave de cuenta vive exclusivamente en el almacén del sistema bajo key_ref. El nonce y etiqueta viajan en un sobre versionado; los metadatos restantes no están cifrados.
+- PK identifica una fila, FK referencia otra y UK señala una clave única. Las PK dobles de destinatarios son compuestas: identificador del correo/intento y `address_key`.
+- `account` tiene UNIQUE(provider, provider_subject). La identidad validada se basa en emisor y sujeto, no en el correo mutable. ACTIVE exige tokens y expiración no nulos; los estados de alta o desconexión permiten su ausencia.
+- `mail.sender_email` admite NULL en SQL, igual que `sender_name`, `message_id` y `body_cipher`. El asunto y la fecha son obligatorios. `body_cipher=NULL` significa que no hay cuerpo disponible, no un mensaje vacío.
+- El CHECK de `mail` distingue INBOX de SENT. Los repositorios y el transporte verifican identidades remotas positivas. **SQLite acepta un CHECK cuyo resultado sea NULL**: el esquema no declara `remote_uid` y `uid_validity` como NOT NULL, así que el CHECK por sí solo no prueba esa positividad frente a cualquier inserción SQL externa.
+- El índice parcial único de INBOX es `(id_account, uid_validity, remote_uid)`. `outbound_id` es único para vincular cada intento con como máximo un SENT. La pertenencia a la misma cuenta y el registro de la dirección SENT se controlan en el repositorio; no hay una FK compuesta que lo imponga por sí sola.
+- El dibujo expresa que un intento listo tiene destinatarios. Esa condición se valida al preparar el envío; una FK no garantiza por sí misma que el padre tenga al menos un hijo.
+- Los booleanos y enumeraciones tienen CHECK. Las FK de cuenta y destinatarios usan CASCADE; `mail.outbound_id` usa RESTRICT. Por eso la eliminación completa de una cuenta retira primero correos que referencian outbox.
+- `inbox_state` puede no existir antes de cargar la bandeja. Sus límites y fecha admiten NULL en el esquema; la ruta normal guarda valores completos al confirmar una página.
+- Las fechas son epoch UTC en milisegundos. La bandeja se ordena por UID; el transporte toma fecha recibida y, si falta, la hora actual. SENT toma la fecha registrada de aceptación.
 
-No hay tablas de etiquetas, adjuntos, contactos compartidos ni borradores persistentes: no son necesarias para este MVP. ComposeRequest vive en memoria hasta enviar; outbox_message es un registro de entrega y recuperación, no una pantalla de enviados ni de borradores.
+## Cuerpos, caché y migraciones
 
-## Reglas de caché y migración
+`body_format=0` conserva texto cifrado; `body_format=1` guarda un sobre JSON cifrado con texto, HTML, indicador de imágenes y `imageReferencesVersion`. Esta última versión va dentro del sobre, no es otra columna. La migración 1→2 añade `body_format` sin reescribir cuerpos existentes.
 
-inbox_state describe un intervalo completo de UID inspeccionado, incluidos huecos por mensajes eliminados. Los límites solo avanzan al confirmar una página completa; una descarga interrumpida no marca cobertura completa. La paginación ordena por UID descendente, siempre bajo el mismo UIDVALIDITY, y devuelve 50 como máximo.
+El esquema no cifra toda SQLite. Tokens y cuerpos están cifrados; asuntos, direcciones, fechas y otros metadatos permanecen legibles. Los detalles están en [persistencia y seguridad](../../arquitectura/persistencia-y-seguridad.md).
 
-Si cambia UIDVALIDITY se invalida únicamente la caché INBOX y su cursor dentro de una transacción; los SENT permanecen. Un mensaje que sale de INBOX deja de aparecer al reconciliar los UID del intervalo visible. La caché desconectada puede ser antigua y la interfaz debe indicarlo.
+Al cerrar la ventana se elimina INBOX, sus destinatarios y `inbox_state`; se conservan cuenta, claves, SENT y outbox. El arranque repite la limpieza para recuperar cierres forzados. Por tanto, la caché de bandeja no es un archivo de correo entre ejecuciones. El presupuesto físico total de 2 GB sigue pendiente.
 
-Las fechas se conservan como instantes UTC; INBOX usa INTERNALDATE de IMAP y SENT la confirmación de entrega al servidor. El orden de la bandeja sigue el del buzón (UID), sin depender de fechas de remitentes.
+La migración de bases antiguas renombra tablas a `legacy_*` y preserva datos. `LegacyImporter` importa cuentas y ofrece lectura de encabezados/cuerpos archivados sin inventar UID remotos. No es una incorporación automática de todo el correo antiguo a INBOX.
 
-DatabaseMigrator crea y actualiza el esquema con PRAGMA user_version y transacciones. La migración de datos anteriores conserva cifrados y claves, convierte fechas antiguas de forma documentada y nunca inventa UID para filas existentes: las filas recibidas sin identidad remota se reconcilian antes de incorporarlas al nuevo índice. No se borra la base para actualizarla. El importador de legado es específico de versión y no forma parte de las entidades finales.
-
-Si refresh detecta un hueco entre la página más reciente y la cobertura antigua, reinicia la cobertura declarada al intervalo nuevo; conserva los cuerpos en caché pero no declara completo el hueco. loadMore lo recorre antes de reutilizar páginas antiguas. has_more solo es falso cuando una respuesta completa del servidor confirma el final.
+Fuentes: [schema.sql](../../../src/main/resources/db/schema.sql), [DatabaseMigrator](../../../src/main/java/com/juanpablo/evermail/repository/DatabaseMigrator.java), [repositorios](../../arquitectura/diagramas/uml-repositories.md).

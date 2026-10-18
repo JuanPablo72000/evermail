@@ -1,79 +1,72 @@
-# Configuración final
+# Configuración y límites de ejecución
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
-    class AppPolicy {
-        +int INBOX_PAGE_SIZE$
-        +Duration STARTUP_BUDGET$
-        +Duration INBOX_BUDGET$
-        +Duration OPEN_HEADER_BUDGET$
-        +Duration CONTENT_BUDGET$
-        +Duration SEND_BUDGET$
-        +Duration OAUTH_AUTHORIZATION_TIMEOUT$
-        +Duration TOKEN_REFRESH_MARGIN$
-        +int AES_KEY_BITS$
+    class AppConstants {
+        +int MAX_EMAILS_DISPLAYED
+        +int AES_KEY_SIZE_BITS
+        +Duration STARTUP_BUDGET
+        +Duration INBOX_BUDGET
+        +Duration OPEN_HEADER_BUDGET
+        +Duration CONTENT_BUDGET
+        +Duration SEND_BUDGET
     }
     class EnvConfig {
         +loadProvider(OAuthProvider provider) ProviderConfig
+        +imageProxyUrl() String
+        +imageProxyKey() String
     }
     class ProviderConfig {
+        -OAuthProvider provider
         -String clientId
         -String clientSecret
-        -URI authorizationEndpoint
-        -URI tokenEndpoint
-        -URI issuerDiscoveryEndpoint
-        -List~String~ scopes
-        -String imapHost
-        -int imapPort
-        -String smtpHost
-        -int smtpPort
-        -boolean publicClient
+        -int redirectPort
     }
     class StorageConfig {
         +databasePath() Path
-        +keyringServiceName() String
-    }
-    class ExecutionConfig {
-        +int ioWorkers
-        +int queueCapacity
-        +Duration databaseBusyTimeout
     }
     class Deadline {
+        +after(Duration duration) Deadline
         +remaining() Duration
-        +throwIfExpired() void
+        +remainingMillis() int
+        +check() void
     }
     class CancellationToken {
-        +isCancelled() boolean
-        +throwIfCancelled() void
+        +cancel() void
+        +check() void
     }
-    EnvConfig --> ProviderConfig
+    EnvConfig ..> ProviderConfig : construye
     ProviderConfig --> OAuthProvider
-    StorageConfig ..> Path
-    Deadline ..> AppPolicy
+    ApplicationCoordinator ..> AppConstants
+    ApplicationCoordinator ..> Deadline
+    ApplicationCoordinator ..> CancellationToken
 ```
 
-El sufijo $ indica constantes estáticas. Configuración validada e inmutable; no conserva contraseñas de correo. Java 21 se utiliza para ejecutar Gradle y la aplicación.
+## Para qué existe
 
-| Política | Valor |
-|---|---|
-| INBOX_PAGE_SIZE | 50 |
-| STARTUP_BUDGET | 5 s |
-| INBOX_BUDGET | 30 s por operación de carga/refresco |
-| OPEN_HEADER_BUDGET | 2 s |
-| CONTENT_BUDGET | 30 s adicionales |
-| SEND_BUDGET | 60 s |
-| OAUTH_AUTHORIZATION_TIMEOUT | 3 min, cancelable |
-| TOKEN_REFRESH_MARGIN | 60 s |
-| AES_KEY_BITS | 256 |
+`EnvConfig` lee entorno y `.env` opcional y valida el proveedor solicitado. `ProviderConfig` contiene la configuración particular del cliente; los endpoints, scopes y servidores pertenecen a `OAuthProvider`, en `model`. Microsoft puede elegir servidor SMTP según la identidad validada. Los secretos no deben presentarse como datos de interfaz.
 
-Los presupuestos son end-to-end e incluyen espera en cola. HTTP/IMAP/SMTP usan timeouts de conexión, lectura y escritura acotados al plazo restante y un mecanismo de cierre al vencer. No se reinicia el plazo en cada reintento.
+`StorageConfig.databasePath()` devuelve `%APPDATA%/Evermail/evermail.db`, fuera del directorio de instalación. Separar datos y ejecutable permite actualizar binarios sin confundirlos con la caché. No existe una clase `ExecutionConfig`: los ejecutores se construyen en el coordinador y en el servicio de presentación.
 
-EnvConfig carga variables del entorno y un .env opcional; valida solo el proveedor solicitado. Google utiliza el tipo de cliente de escritorio configurado y su secreto si el registro lo requiere. Microsoft utiliza cliente público, sin MICROSOFT_CLIENT_SECRET. Los endpoints y redirect loopback deben corresponder al registro real; se usa descubrimiento OIDC oficial para validar identidad y claves.
+## Límites actuales y significado
 
-StorageConfig crea una ruta absoluta local en %APPDATA%/Evermail en Windows, fuera de la carpeta de trabajo. Si no puede resolver o escribir la ruta falla explícitamente. Windows es el entorno de referencia del MVP; otros sistemas requieren un adaptador validado.
+| Constante                                       | Valor           |
+| ----------------------------------------------- | --------------- |
+| MAX_EMAILS_DISPLAYED                            | 50 por página   |
+| STARTUP_BUDGET                                  | 5 s             |
+| INBOX_BUDGET                                    | 30 s            |
+| OPEN_HEADER_BUDGET                              | 2 s             |
+| CONTENT_BUDGET                                  | 30 s            |
+| SEND_BUDGET                                     | 60 s            |
+| OAUTH_AUTHORIZATION_TIMEOUT                     | 3 min           |
+| TOKEN_REFRESH_MARGIN                            | 60 s            |
+| AES_KEY_SIZE_BITS                               | 256             |
+| MAX_BODY_BYTES                                  | 1 MiB           |
+| MAX_INLINE_IMAGE_BYTES / MAX_INLINE_TOTAL_BYTES | 512 KiB / 2 MiB |
+| MAX_MIME_PARTS / MAX_HTML_NODES                 | 256 / 20 000    |
 
-ExecutionConfig define ejecutores acotados y un busy_timeout menor que el presupuesto local restante. No existe un pool SQLite ni DB_POOL_SIZE. Los tamaños de ejecutor se validan con mediciones, no se confunden con límites de rendimiento.
+Son límites configurados, no resultados de rendimiento. En `ApplicationCoordinator.submit` y las tareas de las fachadas, el plazo se crea al comenzar la ejecución: **la espera en cola no se descuenta**. Los pasos de una operación reciben el plazo restante; la segunda fase de imágenes dispone de una operación y un plazo propios. Una cancelación solicita interrupción, pero no deshace efectos ya realizados.
 
-AppContext crea e inyecta configuración una vez. Los valores sensibles se excluyen de logs y diagnósticos.
+Fuente: [paquete config](../../../src/main/java/com/juanpablo/evermail/config). Configuración práctica: [OAuth](../../desarrollo/configuracion-oauth.md) y [proxy](../../desarrollo/proxy-imagenes.md).

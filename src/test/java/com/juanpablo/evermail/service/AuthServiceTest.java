@@ -76,9 +76,20 @@ class AuthServiceTest extends BackendFixture {
     }
 
     @Test
-    void restoringExpiredSessionUsesLocalCacheWithoutNetwork() throws Exception {
+    void restoringExpiredSessionAllowsInitialInboxRequestWithoutRenewingDuringRestore() throws Exception {
         accounts.activate(account, new OAuthCredentials("expired", "refresh", Instant.now().minusSeconds(1)));
-        assertEquals(StartupStatus.OFFLINE, auth(false, null).restoreSession(budget()).getStatus());
+        AuthService auth = auth(false, null);
+        assertEquals(StartupStatus.READY, auth.restoreSession(budget()).getStatus());
+        assertEquals(0, refreshes.get());
+        assertEquals("fresh", auth.ensureCredentials(account.getId(), budget()).getAccessToken());
+        assertEquals(1, refreshes.get());
+    }
+
+    @Test void restoringAccountRequiringConsentRemainsLocal() throws Exception {
+        accounts.setStatus(account.getId(), AccountStatus.REAUTH_REQUIRED);
+        StartupResult restored = auth(false, null).restoreSession(budget());
+        assertEquals(StartupStatus.OFFLINE, restored.getStatus());
+        assertEquals(AccountStatus.REAUTH_REQUIRED, restored.getAccount().getStatus());
         assertEquals(0, refreshes.get());
     }
 

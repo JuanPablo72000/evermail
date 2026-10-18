@@ -1,109 +1,46 @@
-# Errores y resultados finales
+# Excepciones y errores visibles
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
-    class ErrorCode {
-        <<enumeration>>
-        CONFIG_INVALID
-        LOCAL_TIMEOUT
-        NETWORK_TIMEOUT
-        CANCELLED
-        OAUTH_CONNECTION_FAILED
-        OAUTH_INVALID_CREDENTIALS
-        OAUTH_TIMEOUT
-        OAUTH_STATE_MISMATCH
-        OAUTH_TOKEN_INVALID
-        OAUTH_REFRESH_FAILED
-        OAUTH_BROWSER_UNAVAILABLE
-        REAUTH_REQUIRED
-        IMAP_CONNECTION_FAILED
-        IMAP_FETCH_FAILED
-        MAIL_NOT_FOUND
-        CURSOR_INVALID
-        SMTP_REJECTED
-        DELIVERY_UNKNOWN
-        LOCAL_SAVE_PENDING
-        DB_CONNECTION_FAILED
-        DB_QUERY_FAILED
-        DB_MIGRATION_FAILED
-        CRYPTO_OPERATION_FAILED
-        KEY_NOT_FOUND
-        SESSION_UNAVAILABLE
-        IDEMPOTENCY_CONFLICT
-        INVALID_RECIPIENT
-    }
     class EvermailException {
         <<abstract>>
-        -ErrorCode code
-        -boolean retryable
-        +getCode() ErrorCode
-        +isRetryable() boolean
+        -ErrorCode errorCode
+        +getErrorCode() ErrorCode
     }
-    class ConfigurationException {
-
+    class EvermailRuntimeException {
+        <<abstract>>
+        -String fieldName
+        +getFieldName() String
     }
-    class OAuthAuthenticationException {
-
+    class ErrorCode {
+        <<enumeration>>
     }
-    class MailFetchException {
-
-    }
-    class MailSendException {
-
-    }
-    class DatabaseException {
-
-    }
-    class CryptoException {
-
-    }
-    class SessionException {
-
-    }
-    class ValidationException {
-
-    }
-    class SendResult {
-        -UUID submissionId
-        -DeliveryState state
-        -ErrorCode error
-    }
-    Exception <|-- EvermailException
+    EvermailException <|-- AttachmentException
     EvermailException <|-- ConfigurationException
-    EvermailException <|-- OAuthAuthenticationException
+    EvermailException <|-- CryptoException
+    EvermailException <|-- DatabaseException
+    InvalidFieldException <|-- EmptyFieldException
+    Exception <|-- EvermailException
+    RuntimeException <|-- EvermailRuntimeException
+    InvalidFieldException <|-- InvalidEmailAddressException
+    EvermailRuntimeException <|-- InvalidFieldException
     EvermailException <|-- MailFetchException
     EvermailException <|-- MailSendException
-    EvermailException <|-- DatabaseException
-    EvermailException <|-- CryptoException
+    EvermailException <|-- OAuthAuthenticationException
     EvermailException <|-- SessionException
     EvermailException <|-- ValidationException
     EvermailException --> ErrorCode
+    OperationError --> ErrorCode
+    OperationError ..> EvermailException : traduce
     SendResult --> ErrorCode
-    SendResult --> DeliveryState
 ```
 
-## Política de errores
+Existen dos jerarquías: `EvermailException` es comprobada y contiene `errorCode`; `EvermailRuntimeException` es no comprobada y contiene `fieldName`. No existe el atributo `retryable` en la base actual. Lombok genera sus getters. Que una excepción permanezca en el paquete no significa que todas las funciones relacionadas, como adjuntos, estén habilitadas.
 
-Los constructores conservan código, causa y posibilidad de reintento. Los mensajes públicos se generan a partir del código; no contienen tokens, cuerpos, credenciales, respuestas OAuth completas ni rutas privadas. Los errores de validación son recuperables por el usuario y usan ValidationException; no hay una segunda jerarquía de errores de negocio no comprobados.
+`OperationError.from` traduce fallos a mensajes controlados; no copia a la interfaz el mensaje arbitrario del proveedor. Algunos códigos distinguen permisos OAuth, conexión IMAP, SMTP, almacenamiento y cancelación. El catálogo completo está en [ErrorCode.java](../../../src/main/java/com/juanpablo/evermail/exception/ErrorCode.java), evitando mantener una segunda enumeración que se desactualice.
 
-| Situación | Tratamiento |
-|---|---|
-| Red no disponible | Mostrar caché con estado offline; no borrar sesión ni correos. |
-| Credenciales rechazadas | REAUTH_REQUIRED; conservar caché y clave para reautorizar. |
-| Token renovado sin refresh_token nuevo | Conservar refresh_token anterior de la misma identidad. |
-| Cursor de otra cuenta/generación | CURSOR_INVALID; refrescar, no mezclar páginas. |
-| Cuerpo aún no descargado | Ausencia explícita en repositorio; obtener remoto. No es MAIL_NOT_FOUND. |
-| Mensaje remoto eliminado | MAIL_NOT_FOUND y reconciliación de caché. |
-| Fallo SQL | Rollback completo de la unidad de trabajo. |
-| Migración fallida | Recuperación; no ejecutar consultas sobre esquema incompleto. |
-| Clave ausente/cifrado inválido | KEY_NOT_FOUND/CRYPTO_OPERATION_FAILED; nunca generar reemplazo silencioso. |
-| SMTP rechazó sin entrega | FAILED con SMTP_REJECTED; el usuario puede corregir y crear otro intento. |
-| SMTP ambiguo o aceptación parcial | UNKNOWN con DELIVERY_UNKNOWN; no reenvío automático. |
-| SMTP aceptado, falta registro local | LOCAL_SAVE_PENDING; conservar intento y recuperar sin repetir SMTP. |
-| Repetición de submissionId con contenido distinto | IDEMPOTENCY_CONFLICT antes de conectar. |
+Un resultado asíncrono exitoso solo significa que la operación devolvió un valor: si ese valor es `SendResult`, todavía hay que interpretar `DeliveryState`. UNKNOWN no autoriza reenviar. Para ejemplos de fallos y recuperación, consulta [envío](../envio-y-recuperacion.md) y [sesión](../sesion-y-concurrencia.md).
 
-Timeout/cancelación durante SMTP no demuestra ausencia de entrega. MailSendService devuelve SendResult cuando conoce el estado del intento; una excepción aislada no autoriza reenviar. Cancelar tareas de lectura sí permite reintento, mientras se valide cuenta y cursor.
-
-Las fachadas transportan errores en Task.exception y los resultados de envío en Task.value. Los controladores muestran acciones coherentes con retryable y el estado de entrega; retryable nunca significa reintentar automáticamente un envío.
+Fuente: [excepciones](../../../src/main/java/com/juanpablo/evermail/exception) y [OperationError](../../../src/main/java/com/juanpablo/evermail/application/OperationError.java).

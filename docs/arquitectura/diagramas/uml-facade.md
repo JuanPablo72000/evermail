@@ -1,50 +1,40 @@
-# Fachadas finales
+# Fachadas JavaFX existentes
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
     class StartupFacade {
-        +startTask() Task~StartupResult~
+        +startTask() Task
     }
     class AuthFacade {
-        +loginTask(OAuthProvider provider) Task~Account~
-        +logoutTask(UUID accountId) Task~Void~
+        +loginTask(OAuthProvider provider) Task
+        +logoutTask(UUID accountId) Task
     }
     class MailFacade {
-        +cachedInboxTask(UUID accountId, InboxCursor cursor) Task~InboxPage~
-        +refreshInboxTask(UUID accountId) Task~InboxPage~
-        +loadMoreTask(UUID accountId, InboxCursor cursor) Task~InboxPage~
-        +openHeaderTask(UUID accountId, UUID mailId) Task~MailHeader~
-        +loadContentTask(UUID accountId, UUID mailId) Task~MailContent~
-        +markReadTask(UUID accountId, UUID mailId) Task~Void~
+        +cachedInboxTask(UUID accountId, InboxCursor cursor) Task
+        +refreshInboxTask(UUID accountId) Task
+        +loadMoreTask(UUID accountId, InboxCursor cursor) Task
+        +openHeaderTask(UUID accountId, UUID mailId) Task
+        +loadContentTask(UUID accountId, UUID mailId) Task
+        +markReadTask(UUID accountId, UUID mailId) Task
+        +presentationTask(accountId, mailId, reload, deadline) Task
     }
     class ComposeFacade {
-        +sendTask(ComposeRequest request) Task~SendResult~
-    }
-    class TaskRunner {
-        +submit(Task task) void
-        +cancelAccount(UUID accountId) void
-        +shutdown() void
+        +sendTask(ComposeRequest request) Task
     }
     StartupFacade --> StartupService
     AuthFacade --> AuthService
     MailFacade --> InboxService
+    MailFacade ..> MailPresentationService
     ComposeFacade --> MailSendService
-    TaskRunner --> ExecutionConfig
+    MailReaderPane --> MailFacade
 ```
 
-Las fachadas construyen Task sin iniciarlas, asignan Deadline según AppPolicy y adaptan resultados/errores. TaskRunner mantiene ejecutores acotados, con prioridad para apertura/caché frente a sincronización; no crea un hilo sin límite por clic. La interfaz nunca recibe Connection, Store, Transport ni OAuthCredentials.
+Las fachadas crean `javafx.concurrent.Task` sin ejecutarlas. El retorno `Task` abrevia el parámetro de resultado: por ejemplo `Task<InboxPage>`, `Task<MailContent>` o `Task<SendResult>`. El llamador elige el ejecutor y maneja `value` o `exception`.
 
-## Contratos de interfaz
+Su utilidad es adaptar servicios síncronos a JavaFX. Los plazos ordinarios nacen dentro de `call()`; `presentationTask` recibe el plazo compartido del llamador y permite recuperación explícita mediante `reloadContent`.
 
-- cachedInboxTask permite pintar caché antes de refreshInboxTask. Solo una respuesta vigente para cuenta/cursor puede actualizar la vista.
-- loadMoreTask agrega hasta 50 elementos únicos; no sustituye los anteriores.
-- openHeaderTask usa el presupuesto de apertura de 2 s; loadContentTask el de 2 s adicionales. Un fallo muestra error/reintento, no contenido vacío simulado.
-- loginTask usa el plazo humano OAuth separado del arranque.
-- sendTask conserva submissionId; deshabilitar el botón evita dobles clics, pero la idempotencia se garantiza también en OutboxRepository.
-- Los errores funcionales se entregan como SendResult cuando se conoce el estado de entrega. Otros errores aparecen en Task.exception y se muestran sin secretos.
-- Cancelar una Task solicita cancelación al servicio y cierre de recursos. En envío no equivale a anular la entrega ni a autorizar otro intento.
-- Al logout se descartan resultados tardíos y referencias a cuerpos/credenciales; TaskRunner coordina el cierre con AccountCoordinator.
+No existe `TaskRunner` en el código. Tampoco son estas fachadas el camino principal de `MailWindow`: ese camino usa [presentation](uml-presentation.md) y [application](uml-application.md). `MailReaderPane` sí consume `MailFacade`. Esta distinción explica por qué conviven dos formas de adaptación sin dibujarlas como si se ejecutaran ambas en cada apertura.
 
-No existen fachadas de etiquetas, descarga de adjuntos ni administración de borradores en el MVP final.
+Fuente: [paquete facade](../../../src/main/java/com/juanpablo/evermail/facade).

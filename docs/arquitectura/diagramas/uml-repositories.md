@@ -1,74 +1,89 @@
-# Repositorios finales
+# Repositorios, cifrado y transacciones
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
     class AccountRepository {
         +find(UUID id) Account
-        +findByIdentity(OAuthProvider provider, String subject) Account
-        +listUsable() List~Account~
-        +beginProvisioning(Identity identity, String keyRef) Account
-        +activate(UUID id, OAuthCredentials credentials) Account
+        +require(UUID id) Account
+        +findByIdentity(Identity identity) Account
+        +list() List
+        +beginProvisioning(Identity identity) Account
+        +activate(Account account, OAuthCredentials credentials) void
         +readCredentials(UUID id) OAuthCredentials
-        +updateCredentials(UUID id, OAuthCredentials credentials) void
         +setStatus(UUID id, AccountStatus status) void
         +deleteLocal(UUID id) void
     }
     class MailRepository {
         +readInbox(UUID accountId, InboxCursor cursor, int size) InboxPage
+        +saveInboxPage(UUID accountId, RemoteInboxPage page) void
         +findHeader(UUID accountId, UUID mailId) MailHeader
         +readContent(UUID accountId, UUID mailId) MailContent
-        +saveInboxPage(UUID accountId, RemoteInboxPage page) InboxPage
-        +saveContent(UUID accountId, UUID mailId, MailContent content) void
+        +saveContent(UUID accountId, UUID mailId, RemoteMailContent content) void
         +markRead(UUID accountId, UUID mailId) void
-        +invalidateInbox(UUID accountId, long uidValidity) void
+        +discardBody(UUID accountId, UUID mailId) void
+        +remove(UUID accountId, UUID mailId) void
+        +clearInboxCache() void
     }
     class OutboxRepository {
         +prepare(ComposeRequest request) OutboxMessage
-        +find(UUID accountId, UUID submissionId) OutboxMessage
-        +claim(UUID accountId, UUID submissionId) boolean
-        +recordAccepted(UUID accountId, UUID id) void
-        +recordFailure(UUID accountId, UUID id, ErrorCode error) void
-        +recordUnknown(UUID accountId, UUID id, ErrorCode error) void
+        +find(UUID accountId, UUID id) OutboxMessage
+        +claim(UUID accountId, UUID id) boolean
+        +transition(UUID accountId, UUID id, DeliveryState next, ErrorCode error) void
         +commitSent(UUID accountId, UUID id) SendResult
-        +findRecoverable(UUID accountId) List~OutboxMessage~
+        +recoverable(UUID accountId) List
+    }
+    class TransactionManager {
+        +read(DbWork work) Object
+        +write(DbWork work) Object
+        +close() void
+    }
+    class SqliteConnectionProvider {
+        +close() void
+    }
+    class DatabaseMigrator {
+        +migrate() void
+    }
+    class LegacyImporter {
+        +importAccounts() void
+        +listArchived(UUID accountId) List
+        +readArchivedBody(UUID accountId, int legacyMailId) String
     }
     AccountRepository --> AccountDAO
     MailRepository --> MailDAO
-    MailRepository --> MailRecipientDAO
+    MailRepository --> RecipientDAO
     MailRepository --> InboxStateDAO
     OutboxRepository --> OutboxDAO
-    OutboxRepository --> OutboxRecipientDAO
     OutboxRepository --> MailDAO
-    OutboxRepository --> MailRecipientDAO
+    OutboxRepository --> RecipientDAO
+    MailRepository --> AccountRepository
+    OutboxRepository --> AccountRepository
     AccountRepository --> TransactionManager
-    AccountRepository --> SecurityUtil
-    AccountRepository --> KeyStoreService
     MailRepository --> TransactionManager
-    MailRepository --> SecurityUtil
-    MailRepository --> KeyStoreService
     OutboxRepository --> TransactionManager
+    TransactionManager --> SqliteConnectionProvider
+    DatabaseMigrator --> TransactionManager
+    LegacyImporter --> TransactionManager
+    LegacyImporter --> AccountRepository
+    AccountRepository --> SecurityUtil
+    MailRepository --> SecurityUtil
     OutboxRepository --> SecurityUtil
+    AccountRepository --> KeyStoreService
+    MailRepository --> KeyStoreService
     OutboxRepository --> KeyStoreService
 ```
 
-## Responsabilidades y garantías
+## Responsabilidades y motivos
 
-Los repositorios cifran antes de entrar a la transacción y descifran después de leer. Reciben modelos inmutables y crean Row separados; un fallo no modifica el objeto del llamador. Obtienen la clave por key_ref una vez por operación fuera del bloqueo SQL. Una clave puede mantenerse en memoria durante la sesión y se libera al cerrar sesión.
+Los repositorios enlazan cuenta, objetos Java, cifrado y SQL. `AccountRepository.require` rechaza cuentas inexistentes o no utilizables. `readContent` devuelve `null` cuando existe el encabezado pero falta el cuerpo; una fila ausente produce `MAIL_NOT_FOUND`. Esta distinción permite descargar contenido sin confundirlo con un correo eliminado.
 
-AccountRepository no crea ni destruye claves externas: AuthService coordina KeyStoreService y la persistencia. activate/updateCredentials solo aceptan credenciales con refresh_token utilizable, cifran con la clave existente y no rotan claves al reautorizar.
+`TransactionManager` serializa una conexión. `write` confirma o revierte el bloque completo; `read` también serializa el acceso, pero su nombre no impone que JDBC sea de solo lectura. `DbWork` y `Object` abrevian la función y su retorno genérico. El proveedor abre la conexión en su constructor, no mediante un método público `open`.
 
-MailRepository solo devuelve INBOX en readInbox. readContent devuelve ausencia explícita si body_cipher es NULL, no texto vacío. saveInboxPage usa la identidad UID, mezcla sin duplicar y confirma cobertura solo para páginas completas. markRead es local, pertenece al Mail y no requiere etiquetas.
+`saveInboxPage` reconcilia el intervalo confirmado por IMAP y su `UIDVALIDITY`; no declara completos los huecos que no inspeccionó. Los cuerpos y vistos locales existentes se conservan al actualizar encabezados. `discardBody` retira solo contenido; `remove` retira el mensaje INBOX local. `clearInboxCache` elimina toda la bandeja local y `inbox_state`, y después ejecuta `VACUUM` fuera de la transacción. Conserva cuentas, claves, SENT y outbox.
 
-OutboxRepository.prepare valida idempotencia por submissionId y guarda contenido/destinatarios cifrados en una transacción. Si ya existe devuelve el mismo intento; si el contenido difiere rechaza la petición. claim compara PENDING → SENDING atómicamente. commitSent solo admite ACCEPTED o RECORDED y registra Mail SENT, destinatarios y estado RECORDED en una sola transacción.
+`OutboxRepository.prepare` comprueba que un `submissionId` repetido tenga el mismo contenido. `claim` compara PENDING con SENDING en SQL. `commitSent` registra SENT y RECORDED juntos, recifrando previamente para el identificador del correo. `recoverable` devuelve filas de `OutboxDAO`, no mensajes descifrados. Véase [envío y recuperación](../envio-y-recuperacion.md).
 
-## Consultas y concurrencia
+`DatabaseMigrator` mantiene el esquema en versión 2. `LegacyImporter` conserva acceso a archivos de correo antiguos en tablas `legacy_*`; no inventa UID para introducirlos en la bandeja actual. Véase [persistencia y seguridad](../persistencia-y-seguridad.md).
 
-Todo acceso exige accountId y verifica propiedad. No se devuelven tokens a la interfaz. Las mutaciones de una misma cuenta se coordinan además con AccountCoordinator; cerrar sesión espera/cancela operaciones conforme al contrato de servicios.
-
-La cuenta DISCONNECTING deja de ser utilizable antes de limpiar datos. deleteLocal elimina primero referencias de enviados, después outbox y finalmente cuenta/dependientes, dentro de una transacción; así respeta la FK RESTRICT del ER. Debe poder repetirse.
-
-No hay DraftRepository ni LabelRepository ni repositorio de adjuntos en el núcleo final del MVP. La composición vive en memoria y los enviados persistentes se registran mediante OutboxRepository.
-
-Antes de commitSent se descifra el cuerpo del outbox y se cifra para el nuevo mailId/CryptoContext fuera de la transacción; no se copia un ciphertext autenticado para otro registro. La transacción vuelve a comprobar el estado e idempotencia antes de escribir.
+Fuente: [paquete repository](../../../src/main/java/com/juanpablo/evermail/repository).

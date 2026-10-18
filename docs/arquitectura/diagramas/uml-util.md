@@ -1,90 +1,61 @@
-# Utilidades, cifrado y adaptadores
+# Utilidades de MIME, HTML, CSS y cifrado
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
     class EmailValidator {
-        +normalize(String email) String$
-        +validateRecipients(List~Recipient~ recipients) List~Recipient~$
+        +normalize(String input) String
+        +validateRecipients(List recipients) List
     }
     class MimeUtil {
-        +extractReadableText(MimeMessage message) String$
-        +extractHeader(MimeMessage message, RemoteMailId remoteId) RemoteMailHeader$
-        +extractRecipients(MimeMessage message) List~Recipient~$
+        +extractReadableText(Part message) String
+        +htmlToText(String html) String
+        +extractRecipients(Message message) List
     }
     class HybridMime {
-        +extract(Part message, Deadline deadline) RemoteMailContent$
+        +extract(Part message, Deadline deadline) RemoteMailContent
     }
     class HtmlMail {
-        +sanitize(String raw, ImageResolver resolver, Deadline deadline) SafeBody$
-        +document(String safeHtml) String$
+        +sanitize(String raw, ImageResolver resolver, Deadline deadline) SafeBody
+        +document(String safeHtml) String
+        +safeLink(String value) boolean
+        +safeImageUrl(String value) boolean
+    }
+    class MailCss {
+        ~stylesheet(String css) String
+        ~inline(String css) String
     }
     class InlineImages {
-        +dataUri(byte[] bytes) String$
-        +validateDataUri(String uri) String$
+        +dataUri(byte[] bytes) String
+        +validateDataUri(String uri) String
     }
     class DateUtil {
-        +format(Instant instant, ZoneId zone) String$
+        +format(Instant instant, ZoneId zone) String
     }
     class SecurityUtil {
         +generateKey() SecretKey
         +encrypt(String plainText, SecretKey key, CryptoContext context) String
         +decrypt(String envelope, SecretKey key, CryptoContext context) String
+        +decryptLegacy(String envelope, SecretKey key) String
     }
-    class CryptoContext {
-        -UUID accountId
-        -UUID recordId
-        -String fieldName
-    }
-    class KeyStoreService {
-        +create(String keyRef) void
-        +read(String keyRef) SecretKey
-        +delete(String keyRef) void
-    }
-    class OAuthClient {
-        +authorize(ProviderConfig config, CancellationToken cancel) AuthorizationResult
-        +refresh(ProviderConfig config, OAuthCredentials credentials, Deadline deadline) OAuthCredentials
-    }
-    class InboxSession {
-        +fetchLatest(int limit, Deadline deadline) RemoteInboxPage
-        +fetchBefore(InboxCursor cursor, int limit, Deadline deadline) RemoteInboxPage
-        +fetchContent(RemoteMailId id, Deadline deadline) RemoteMailContent
-        +close() void
-    }
-    class SmtpSession {
-        +submit(OutboxMessage message, Deadline deadline) SmtpOutcome
-        +close() void
-    }
-    SecurityUtil --> CryptoContext
-    KeyStoreService --> SecurityUtil : genera clave
-    KeyStoreService --> Keyring
-    OAuthClient --> ProviderConfig
-    InboxSession ..> HybridMime
     HybridMime ..> MimeUtil
     HybridMime ..> HtmlMail
     HybridMime ..> InlineImages
-    SmtpSession ..> OutboxMessage
+    HtmlMail ..> MailCss
+    HtmlMail ..> InlineImages
+    MimeUtil ..> EmailValidator
+    SecurityUtil ..> CryptoContext
 ```
 
-El sufijo $ indica métodos estáticos. OAuthClient, InboxSession y SmtpSession son adaptadores de protocolo del paquete service, mostrados aquí para completar los contratos consumidos por los servicios; no se ubican en util. KeyStoreService pertenece a infraestructura de seguridad.
+`HybridMime` recorre MIME con límites de tamaño, profundidad y número de partes. Conserva texto y HTML alternativos y resuelve imágenes CID referenciadas; no ofrece una descarga general de adjuntos. `MimeUtil` extrae texto y destinatarios; los encabezados remotos los construye el transporte IMAP.
 
-AuthorizationResult contiene identidad validada y OAuthCredentials. RemoteInboxPage contiene UIDVALIDITY, intervalo inspeccionado, metadatos/destinatarios, extremos y hasMore. SmtpOutcome distingue aceptación total, rechazo sin entrega e incertidumbre/aceptación parcial. RemoteMailHeader contiene metadatos remotos sin UUID local; RemoteMailContent contiene texto y destinatarios sin mailId. El servicio/repositorio los vincula a la cuenta y a los UUID locales. Son valores de transporte, no tablas.
+`HtmlMail` reconstruye HTML permitido con jsoup. `MailCss`, de visibilidad de paquete, analiza CSS con ph-css y filtra propiedades, selectores y media queries. Así conserva parte del diseño de los correos sin permitir código activo ni hojas externas. `SafeBody` e `ImageResolver` son tipos anidados en `HtmlMail`; hay una sobrecarga de `sanitize` para resolver recursos remotos.
 
-## Cifrado
+Las imágenes y fondos externos quedan como referencias inertes hasta que `ImageProxyClient` devuelve datos raster validados. `InlineImages` verifica formatos y dimensiones. El visor no recibe una URL de origen que pueda descargar por su cuenta. Véase [lectura y caché](../lectura-y-cache.md).
 
-AES-256-GCM utiliza nonce aleatorio nuevo de 12 bytes y etiqueta de 128 bits por operación. El sobre versionado codificado en Base64 incluye versión, nonce y ciphertext/tag. CryptoContext se autentica como AAD (cuenta, registro y campo) para impedir intercambiar valores cifrados entre registros.
+`EmailValidator` normaliza dominio y espacios, conserva el local-part y valida duplicados por rol. No aplica reglas privadas de Gmail a todas las direcciones. `DateUtil` adapta instantes a la zona de presentación.
 
-KeyStoreService usa una referencia UUID independiente del correo y de IDs incrementales. create nunca sobrescribe una clave existente; read falla explícitamente si no existe; delete es idempotente. Reautenticar o renovar tokens nunca cambia la clave. El importador de legado reconoce el formato anterior y lo recifra de forma controlada, sin tratar cualquier fallo de autenticidad como formato antiguo.
+`SecurityUtil` cifra con AES-GCM y autentica cuenta, registro y campo con `CryptoContext`; la explicación y sus límites están en [persistencia y seguridad](../persistencia-y-seguridad.md). Los adaptadores de red y claves se muestran en [servicios](uml-service.md), no se redefinen aquí.
 
-Se limita la vida de credenciales y cuerpos descifrados; no se incluyen en toString ni excepciones. El cifrado de campos no equivale a cifrar toda SQLite.
-
-## MIME, direcciones y red
-
-HybridMime recorre multipart con límites, conserva text/plain y text/html, resuelve imágenes CID referenciadas y respeta charset. MimeUtil mantiene la conversión a texto y extracción de destinatarios. HtmlMail limpia HTML y CSS con una lista permitida; InlineImages valida imágenes raster acotadas. Se omiten adjuntos ordinarios y recursos externos. Véase [lectura híbrida](../../desarrollo/lector-correo.md).
-
-EmailValidator utiliza análisis de direcciones estructurado, conserva el local-part y normaliza el dominio/espacios. Consolida duplicados del mismo rol y rechaza roles contradictorios antes de SMTP. No aplica reglas privadas de un proveedor a todas las direcciones.
-
-InboxSession obtiene contenido por UID y UIDVALIDITY; no recorre todo el buzón ni identifica mensajes exclusivamente por Message-ID. SmtpSession construye el mensaje con Message-ID estable, omite BCC de encabezados transmitidos y sí los incluye en el sobre de destinatarios.
-
-No hay FileUtil de descarga ni almacenamiento de adjuntos en el MVP final. Evitar incorporar esa función elimina sus rutas remotas y colisiones del flujo objetivo, sin exigir modificarla como requisito del MVP.
+Fuente: [paquete util](../../../src/main/java/com/juanpablo/evermail/util).

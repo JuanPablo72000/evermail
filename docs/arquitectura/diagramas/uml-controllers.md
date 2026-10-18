@@ -1,93 +1,45 @@
-# Interfaz y navegación finales
+# Arranque de la interfaz y lector independiente
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
+    class Launcher {
+        +main(String[] args) void
+    }
     class App {
         +start(Stage stage) void
         +stop() void
     }
-    class AppContext {
-        +create() AppContext
+    class MailWindow {
+        +start() void
+        +close() CompletionStage
+    }
+    class MailReaderPane {
+        +open(UUID accountId, UUID mailId) void
+        +clear() void
         +close() void
     }
-    class SceneNavigator {
-        +showLoading() void
-        +showLogin() void
-        +showInbox(Account account) void
-        +showCompose(Account account) void
-        +showRecovery(ErrorCode code) void
-    }
-    class LoadingController {
-        +initialize() void
-        +onRetryClick() void
-    }
-    class LoginController {
-        +onGoogleLoginClick() void
-        +onMicrosoftLoginClick() void
-        +onCancelLoginClick() void
-    }
-    class InboxController {
-        +initialize(Account account) void
-        +onLoadMoreClick() void
-        +onMailClick(UUID mailId) void
-        +onComposeClick() void
-        +onLogoutClick() void
-        +onRetryClick() void
-    }
-    class ComposeController {
-        +initialize(Account account) void
-        +onSendClick() void
-        +onCancelClick() void
-    }
-    App --> AppContext
-    App --> SceneNavigator
-    AppContext --> TaskRunner
-    AppContext --> TransactionManager
-    LoadingController --> StartupFacade
-    LoginController --> AuthFacade
-    InboxController --> MailFacade
-    InboxController --> AuthFacade
-    ComposeController --> ComposeFacade
-    LoadingController --> SceneNavigator
-    LoadingController --> TaskRunner
-    LoginController --> SceneNavigator
-    LoginController --> TaskRunner
-    InboxController --> SceneNavigator
-    InboxController --> TaskRunner
-    ComposeController --> SceneNavigator
-    ComposeController --> TaskRunner
+    Application <|-- App
+    Launcher ..> App
+    App --> MailWindow
+    App ..> ApplicationCoordinator : crea
+    App ..> CoordinatedPresentationBackend : crea
+    App ..> PreviewData : modo preview
+    MailWindow --> MailPresenter
+    MailWindow --> SafeMailBody
+    MailReaderPane --> MailFacade
+    BorderPane <|-- MailReaderPane
 ```
 
-AppContext construye una sola instancia de infraestructura y colaboradores e inyecta controladores mediante FXMLLoader.controllerFactory. App.stop cierra tareas, transportes y conexión. SceneNavigator concentra rutas FXML; los controladores no acceden directamente a repositorios, protocolos ni secretos.
+## Dos caminos que no deben confundirse
 
-```mermaid
-stateDiagram-v2
-    [*] --> Carga
-    Carga --> Login : sin sesion o requiere autorizacion
-    Carga --> Bandeja : sesion disponible o cache offline
-    Carga --> Recuperacion : fallo local o presupuesto agotado
-    Recuperacion --> Carga : reintentar
-    Login --> Bandeja : OAuth completado
-    Login --> Login : cancelacion o error
-    Bandeja --> Componer : correo nuevo
-    Componer --> Bandeja : entrega registrada o cancelar antes de enviar
-    Componer --> Componer : rechazo o resultado incierto
-    Bandeja --> Login : logout completado
-```
+El arranque normal crea `ApplicationCoordinator`, su adaptador `CoordinatedPresentationBackend` y `MailWindow`. La ventana crea el presentador y aplica estados en JavaFX. Los componentes FXML y sus responsabilidades están en [UI](uml-ui.md); las rutas están en [navegación](uml-navigation.md).
 
-## Comportamiento requerido
+El paquete **`controller`**, en singular, contiene `MailReaderPane`: un lector independiente que consume `MailFacade`. No es el visor utilizado por `MailWindow`, que usa `SafeMailBody`. Mantener ambos en el dibujo permite localizar el componente existente sin atribuirle el flujo principal. El nombre histórico de este archivo se conserva para no romper enlaces.
 
-- Carga tiene presupuesto de 5 s. Una espera que lo exceda cambia a recuperación con información explícita; no bloquea indefinidamente ni garantiza éxito ante un disco averiado.
-- Login utiliza el navegador del sistema; cancelar cierra el intento OAuth sin afectar otras cuentas.
-- Bandeja muestra inicialmente los 50 más recientes; pinta caché disponible y actualiza sin duplicar. Indica modo offline/caché antigua. Cargar más agrega otros 50 y conserva selección/posición; si no hay más se deshabilita.
-- El contenido se abre en dos etapas: encabezado en 2 s y contenido en otros 2. MailReaderPane ofrece HTML seguro mediante WebView sin JavaScript, alternativa de texto y recursos externos bloqueados. La preparación comparte el plazo del contenido y ocurre fuera del hilo JavaFX. La integración con la bandeja sigue pendiente; véase [lectura híbrida](../../desarrollo/lector-correo.md).
-- Componer admite destinatarios y texto de un correo nuevo. Mantiene ComposeRequest en memoria; cancelar antes de enviar descarta esa edición. No hay pantalla de borradores.
-- Al enviar conserva submissionId y evita edición/repetición mientras el resultado está pendiente. Un resultado UNKNOWN informa que pudo entregarse y no ofrece reenvío automático. Tras rechazo definitivo, corregir/enviar crea una nueva solicitud explícita.
-- Cerrar una vista durante SMTP no implica cancelar un correo ya transmitido. El estado sigue registrado y se recupera conforme al UML de servicios.
-- Logout limpia selección/contenido y cancela resultados tardíos; si la limpieza local falla se muestra recuperación y la cuenta permanece DISCONNECTING.
+Con `--preview`, `App` carga una composición FXML y `PreviewData` proporciona ejemplos, sin arrancar el backend. Sirve para revisar diseño sin una cuenta real. Véase [previsualización](../../desarrollo/previsualizar-interfaz.md).
 
-## Alcance y tiempos
+Al cerrar normalmente, `MailWindow.close()` espera de forma asíncrona el cierre del presentador y comunica fallos; `App.stop()` también solicita cierre. Los detalles y diferencias frente a logout se explican en [sesión y concurrencia](../sesion-y-concurrencia.md).
 
-No se añaden pantallas de enviados, etiquetas, contactos, respuestas ni adjuntos. Guardar enviados es persistencia interna. Los presupuestos vigentes son arranque 5 s, bandeja 5 s, lectura 2 + 2 s y envío 4 s. Son criterios a medir en un entorno de referencia, no una garantía sobre redes externas. La interfaz siempre debe distinguir éxito, espera, offline y error.
+Fuente: [App](../../../src/main/java/com/juanpablo/evermail/App.java) y [MailReaderPane](../../../src/main/java/com/juanpablo/evermail/controller/MailReaderPane.java).

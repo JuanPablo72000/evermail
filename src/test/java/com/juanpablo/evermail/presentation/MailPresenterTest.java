@@ -68,6 +68,18 @@ class MailPresenterTest {
         assertFalse(presenter.state().inbox().empty());
     }
 
+    @Test void startupWithEmptyCacheLoadsMailWithoutManualRefresh() {
+        presenter.start();
+        backend.session = new SessionSnapshot(SessionSnapshot.Phase.READY, account, backend.session.version());
+        backend.startup.complete(new StartupResult(account, StartupStatus.READY)); flush();
+        backend.inboxes.getLast().complete(page(false)); flush();
+        assertEquals(List.of(PresentationBackend.InboxAction.CACHE, PresentationBackend.InboxAction.REFRESH), backend.actions);
+        assertTrue(presenter.state().inbox().loading());
+        backend.inboxes.getLast().complete(page(false, mail(1))); flush();
+        assertEquals(List.of(mail(1).getId()), presenter.state().inbox().items().stream().map(MailHeader::getId).toList());
+        assertFalse(presenter.state().inbox().loading());
+    }
+
     @Test void offlineCacheDoesNotAutomaticallyContactProvider() {
         inbox();
         assertEquals(List.of(PresentationBackend.InboxAction.CACHE), backend.actions);

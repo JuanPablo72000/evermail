@@ -1,84 +1,61 @@
-# Persistencia y transacciones finales
+# DAO y filas de persistencia
 
-**Diseño objetivo del MVP de Evermail en Java 21.** Este documento especifica cómo debe quedar la aplicación; no afirma que el código actual ya lo implemente. Alcance: sesión OAuth2, bandeja, lectura, composición de correos nuevos, envío y caché local. Los demás diagramas de esta carpeta forman el mismo diseño.
+Referencia de la implementación revisada el 17 de octubre de 2026. Se muestran responsabilidades y contratos seleccionados; no todos los miembros privados ni las sobrecargas. Las clases externas al paquete se incluyen solo para explicar dependencias.
 
 ```mermaid
 classDiagram
-    class SqliteConnectionProvider {
-        +open() Connection
-        +close() void
-    }
-    class TransactionManager {
-        +read(DbWork work) Object
-        +write(DbWork work) Object
-        +close() void
-    }
-    class DatabaseMigrator {
-        +migrate() void
-    }
     class AccountDAO {
-        +find(Connection tx, UUID id) AccountRow
-        +findByIdentity(Connection tx, OAuthProvider provider, String subject) AccountRow
-        +list(Connection tx) List~AccountRow~
-        +insert(Connection tx, AccountRow row) void
-        +update(Connection tx, AccountRow row) void
-        +delete(Connection tx, UUID id) void
+        +find(Connection c, UUID id) Row
+        +findByIdentity(Connection c, Identity identity) Row
+        +list(Connection c) List
+        +insert(Connection c, Row row) void
+        +update(Connection c, Row row) void
     }
     class MailDAO {
-        +find(Connection tx, UUID accountId, UUID mailId) MailRow
-        +findInboxPage(Connection tx, UUID accountId, InboxCursor cursor, int limit) List~MailRow~
-        +upsertIncoming(Connection tx, MailRow row) void
-        +insertSent(Connection tx, MailRow row) void
-        +updateBody(Connection tx, UUID accountId, UUID mailId, String cipher) void
-        +markRead(Connection tx, UUID accountId, UUID mailId) void
-        +deleteMissing(Connection tx, UUID accountId, RemoteUidRange range) void
-        +invalidateInbox(Connection tx, UUID accountId) void
-    }
-    class MailRecipientDAO {
-        +find(Connection tx, UUID mailId) List~RecipientRow~
-        +replace(Connection tx, UUID mailId, List~RecipientRow~ rows) void
+        +find(Connection c, UUID accountId, UUID id) Row
+        +findRemote(Connection c, UUID accountId, RemoteMailId remote) Row
+        +page(c, accountId, validity, before, lower, size) List
+        +insert(Connection c, Row row) void
     }
     class InboxStateDAO {
-        +find(Connection tx, UUID accountId) InboxStateRow
-        +save(Connection tx, InboxStateRow row) void
+        +find(Connection c, UUID id) Row
+        +save(Connection c, UUID id, Row row) void
     }
     class OutboxDAO {
-        +find(Connection tx, UUID accountId, UUID id) OutboxRow
-        +insert(Connection tx, OutboxRow row) void
-        +transition(Connection tx, UUID accountId, UUID id, DeliveryState expected, DeliveryState next) boolean
-        +findRecoverable(Connection tx, UUID accountId) List~OutboxRow~
+        +find(Connection c, UUID accountId, UUID id) Row
+        +insert(Connection c, Row row) void
+        +transition(c, accountId, id, expected, next, error) boolean
+        +recoverable(Connection c, UUID accountId) List
     }
-    class OutboxRecipientDAO {
-        +find(Connection tx, UUID outboxId) List~RecipientRow~
-        +insert(Connection tx, UUID outboxId, List~RecipientRow~ rows) void
+    class RecipientDAO {
+        +find(Connection c, UUID id, boolean outbox) List
+        +replace(Connection c, UUID id, List recipients, boolean outbox) void
     }
-    TransactionManager --> SqliteConnectionProvider
-    DatabaseMigrator --> TransactionManager
-    AccountDAO ..> Connection : transaccion recibida
-    MailDAO ..> Connection : transaccion recibida
-    MailRecipientDAO ..> Connection : transaccion recibida
-    InboxStateDAO ..> Connection : transaccion recibida
-    OutboxDAO ..> Connection : transaccion recibida
-    OutboxRecipientDAO ..> Connection : transaccion recibida
+    class Sql {
+        +update(Connection c, String sql, Object[] arguments) int
+        +list(Connection c, String sql, Mapper mapper, Object[] arguments) List
+        +one(Connection c, String sql, Mapper mapper, Object[] arguments) Object
+    }
+    AccountDAO ..> Sql
+    MailDAO ..> Sql
+    InboxStateDAO ..> Sql
+    OutboxDAO ..> Sql
+    RecipientDAO ..> Sql
+    Sql ..> Connection
+    AccountDAO ..> AccountRow
+    MailDAO ..> MailRow
+    OutboxDAO ..> OutboxRow
+    InboxStateDAO ..> InboxStateRow
 ```
 
-## Unidad de trabajo
+## Cómo leer los tipos
 
-DbWork<T> es una función que recibe Connection y devuelve T; Object en el dibujo abrevia el retorno genérico T de read/write. Los tipos Row representan exactamente las columnas del [ER](../../datos/diagramas/er-diagram.md), sin descifrar tokens o cuerpos. RemoteUidRange contiene UIDVALIDITY, límites del intervalo y UID presentes confirmados por IMAP.
+`AccountRow`, `MailRow`, `OutboxRow` e `InboxStateRow` son alias visuales de las clases anidadas `AccountDAO.Row`, `MailDAO.Row`, `OutboxDAO.Row` e `InboxStateDAO.Row`; no son archivos independientes. `List`, `Object` y `Object[]` abrevian genéricos y varargs para mantener legible el diagrama. `Sql.Mapper` convierte cada fila de JDBC.
 
-TransactionManager posee una única conexión con acceso serializado; ninguna capa externa la usa simultáneamente. read y write ejecutan bloques cortos; write confirma todo o revierte todo. Los DAO no hacen commit, rollback, close ni cambios de autoCommit. Las operaciones SMTP, IMAP, OAuth2 y keyring se realizan fuera de la transacción.
+Los DAO reciben una `Connection` ya coordinada: no deciden cuándo confirmar, revertir ni cerrar. Esto permite guardar una página, sus destinatarios y su cobertura dentro de la misma transacción. `RecipientDAO` atiende ambas tablas de destinatarios mediante el parámetro `outbox`; no hay dos DAO separados.
 
-SqliteConnectionProvider abre la base, activa foreign_keys y un busy_timeout acotado. No existe DB_POOL_SIZE. Los métodos DAO parametrizan valores SQL y comprueban filas afectadas. AccountDAO usa la misma coordinación que los demás.
+`MailDAO.Row` combina encabezado, cuerpo cifrado y formato de cuerpo. Los repositorios realizan parte de las actualizaciones directamente con `Sql`; el DAO no concentra todo el SQL del proyecto. `Sql` parametriza valores; la elección de tablas en `RecipientDAO` procede del booleano, no de texto introducido por el usuario.
 
-## Integridad
+La infraestructura de conexión y transacciones se muestra en [repositorios](uml-repositories.md). El [ER](../../datos/diagramas/er-diagram.md) describe tablas, no objetos Java.
 
-- Cada consulta de MailRow incluye todos sus campos, también sender_name; no hay lectura de columnas omitidas.
-- upsertIncoming usa la clave única de UID del ER y conserva cuerpo y lectura local ya existentes al actualizar metadatos.
-- El guardado de una página, sus destinatarios y su cobertura inbox_state comparten transacción.
-- insertSent, destinatarios y transición ACCEPTED → RECORDED comparten transacción. outbound_id único hace idempotente repetir esa operación.
-- transition usa comparación de estado esperado; solo un trabajador puede cambiar PENDING → SENDING.
-- findInboxPage aplica cuenta, direction=INBOX, UIDVALIDITY y remote_uid < beforeUid, ORDER BY remote_uid DESC; sin OFFSET.
-- DatabaseMigrator aplica versiones consecutivas antes de habilitar repositorios. Un fallo revierte esa migración y presenta recuperación, no continúa con un esquema parcial. PRAGMA user_version registra la versión.
-- Se migran datos legados explícitamente; nunca se ejecuta un borrado general para resolver incompatibilidades.
-
-Los errores SQL se traducen a DatabaseException preservando una causa técnica sin incluir datos sensibles.
+Fuente: [paquete dao](../../../src/main/java/com/juanpablo/evermail/dao).

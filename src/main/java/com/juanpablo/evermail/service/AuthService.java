@@ -96,12 +96,11 @@ public class AuthService {
             deadline.check();
             if (account.getStatus() == AccountStatus.ACTIVE) {
                 keys.read(account.getKeyRef());
-                // Restoring local state never waits for network; sessions refresh on demand.
-                OAuthCredentials credentials = accounts.readCredentials(account.getId());
-                StartupStatus status = credentials.getExpiresAt().isAfter(Instant.now(clock))
-                        ? StartupStatus.READY : StartupStatus.OFFLINE;
+                // Expiration does not imply offline: the initial inbox request renews
+                // credentials on demand, without blocking local session restoration.
+                accounts.readCredentials(account.getId());
                 deadline.check();
-                return new StartupResult(account, status);
+                return new StartupResult(account, StartupStatus.READY);
             }
             if (account.getStatus() == AccountStatus.REAUTH_REQUIRED) {
                 keys.read(account.getKeyRef());

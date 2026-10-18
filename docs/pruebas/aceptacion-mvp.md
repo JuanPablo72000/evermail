@@ -1,5 +1,12 @@
 # Aceptación del MVP — 11 de octubre de 2026
 
+## Verificación posterior — 16 de octubre de 2026
+
+- El usuario confirmó con su cuenta real que, tras la corrección de restauración
+  de sesión, la bandeja carga automáticamente al abrir Evermail sin pulsar Recargar.
+- Las fotos de cuenta y remitentes siguen sin estar implementadas: la interfaz
+  muestra iniciales. Esta comprobación no acredita carga de avatares.
+
 ## Confirmación del usuario
 
 - Google: acceso al correo y funcionamiento correcto de los flujos, según su prueba.
