@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.*?>
+<?import com.juanpablo.evermail.ui.*?>
+<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Main.css" styleClass="evermail-view,main-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="1280" prefHeight="720" minWidth="0"><content><ResponsiveGrid fx:id="layout" mode="main" styleClass="main-layout">
+<fx:include fx:id="sidebar" source="Sidebar.fxml"/><fx:include fx:id="inbox" source="Inbox.fxml"/><fx:include fx:id="compose" source="Compose.fxml"/>
+</ResponsiveGrid></content></ScrollPane>

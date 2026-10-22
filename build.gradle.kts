@@ -24,6 +24,7 @@ java {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+    options.release.set(21)
 }
 
 application {
@@ -37,6 +38,13 @@ javafx {
 }
 
 dependencies {
+    implementation("net.java.dev.jna:jna:5.13.0")
+    implementation("net.java.dev.jna:jna-platform:5.13.0")
+    implementation("org.jsoup:jsoup:1.22.2")
+    implementation("com.helger:ph-css:7.0.4")
+    implementation("org.slf4j:slf4j-api:2.0.9")
+    // Explicitly preserve the current no-logging behavior for third-party libraries.
+    runtimeOnly("org.slf4j:slf4j-nop:2.0.9")
     // Jakarta Mail - IMAP/SMTP protocols
     implementation("org.eclipse.angus:jakarta.mail:2.0.3")
 
@@ -53,10 +61,49 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.12.1")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Exercise the real module path too: unit tests can mask unresolved runtime modules.
+tasks.register<JavaExec>("verifyMailRuntime") {
+    group = "verification"
+    description = "Checks HTML/CSS parsing on the application module path without accounts or network."
+    dependsOn(tasks.testClasses)
+    // Include filename-derived automatic modules such as java.keyring as well.
+    classpath = files()
+    mainModule.set("com.juanpablo.evermail")
+    mainClass.set("com.juanpablo.evermail.util.MailRuntimeProbe")
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    doFirst {
+        jvmArgs("--module-path", sourceSets.main.get().runtimeClasspath.asPath,
+                "--patch-module", "com.juanpablo.evermail=${sourceSets.test.get().output.classesDirs.asPath}")
+    }
+}
+
+tasks.check { dependsOn("verifyMailRuntime") }
+
+tasks.register<JavaExec>("diagnoseMail") {
+    group = "verification"
+    description = "Checks saved mail sessions without sending messages or exposing credentials."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.juanpablo.evermail.diagnostics.MailDiagnostics")
+    modularity.inferModulePath.set(false)
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+}
+
+tasks.register<JavaExec>("measureMailReads") {
+    group = "verification"
+    description = "Measures first and cached reads of up to three messages without logging private data."
+    dependsOn(tasks.classes)
+    classpath = files()
+    mainModule.set("com.juanpablo.evermail")
+    mainClass.set("com.juanpablo.evermail.diagnostics.ReadTimings")
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    doFirst { jvmArgs("--module-path", sourceSets.main.get().runtimeClasspath.asPath) }
 }
 
 jlink {

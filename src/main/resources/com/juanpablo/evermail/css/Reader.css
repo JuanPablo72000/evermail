@@ -1,0 +1,28 @@
+.reader-view { -fx-background-color: #251a30; -fx-border-color: #2034e9; -fx-border-radius: 12; }
+.reader-content { -fx-background-color: #1e1527; -fx-padding: 1.95em 2.35em 1.7em 1.35em; -fx-spacing: 0.9em; }
+.reader-toolbar { -fx-hgap: 1.1em; -fx-vgap: 0.5em; -fx-alignment: center-left; -fx-padding: 0 0.6em 0.8em; }
+.reader-toolbar .button { -fx-font-size: 1.2em; -fx-min-height: 2.08333em; }
+.reader-toolbar .tool-button { -fx-border-color: transparent; -fx-text-fill: white; }
+.reader-toolbar .tool-button:hover { -fx-background-color: transparent; -fx-border-color: white; }
+.reader-toolbar .action-button { -fx-font-size: 0.9em; -fx-pref-width: 10.5em; -fx-min-height: 3.7222em; }
+.action-button .mail-icon { -fx-min-width: 2.77778em; -fx-pref-width: 2.77778em; -fx-max-width: 2.77778em; -fx-min-height: 2.77778em; -fx-pref-height: 2.77778em; -fx-max-height: 2.77778em; }
+.reader-sender { -fx-font-size: 1.8em; }
+.reader-meta { -fx-spacing: 0.8em; -fx-alignment: center-left; }
+.reader-meta .small, .reader-recipient { -fx-font-size: 1em; }
+.reader-date { -fx-font-size: 1.35em; -fx-alignment: center-right; -fx-text-alignment: right; -fx-padding: 0.4em 0; }
+.reader-details { -fx-hgap: 1em; -fx-vgap: 0.5em; }
+.reader-formats { -fx-hgap: 2em; -fx-vgap: 0.4em; -fx-alignment: center-right; }
+.reader-formats .button { -fx-pref-width: 6.66667em; -fx-pref-height: 2.08333em; }
+.reader-body { -fx-background-color: white; -fx-background-radius: 0.6em; -fx-padding: 0.6em; }
+.reader-body .label { -fx-text-fill: #45406d; }
+.reader-body .body-heading { -fx-text-fill: #46159b; -fx-font-size: 2.5em; -fx-font-weight: bold; }
+.reader-body .separator .line { -fx-border-color: #fbbf24 transparent transparent; }
+.reader-text { -fx-text-fill: #45406d; -fx-background-color: white; }
+.reader-text .content { -fx-background-color: white; }
+.sample-table .label { -fx-padding: 0.35em 0.5em; -fx-border-color: #e8e1f2; -fx-border-width: 0.5; }
+.sample-table .table-heading { -fx-background-color: #ece5f9; -fx-text-fill: #46159b; -fx-font-weight: bold; }
+
+.reader-view .sidebar { -fx-padding: 0.55em 0 2.2em 1.4em; }
+.reader-toolbar .action-button { -fx-pref-width: 9.55556em; -fx-padding: 0 0.2em; }
+#previousButton .mail-icon, #nextButton .mail-icon { -fx-min-width: 0.58333em; -fx-pref-width: 0.58333em; -fx-max-width: 0.58333em; }
+#formattedButton { -fx-padding: 0.25em 0.15em; }

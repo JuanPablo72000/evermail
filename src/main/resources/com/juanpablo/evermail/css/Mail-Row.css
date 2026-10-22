@@ -1,0 +1,9 @@
+.mail-row { -fx-background-color: #1e1527; -fx-background-radius: 0.85em; -fx-border-radius: 0.85em; -fx-padding: 0.65em 0.85em 0.65em 0.95em; -fx-spacing: 1.15em; -fx-border-color: transparent transparent rgba(255,255,255,0.75) transparent; -fx-border-width: 0 0 0.05em 0; -fx-cursor: hand; -fx-pref-height: 5.2em; -fx-min-height: 5.2em; -fx-alignment: center-left; }
+.mail-row:hover { -fx-background-color: #505050; }
+.mail-sender { -fx-font-size: 1em; -fx-font-weight: bold; }
+.mail-subject { -fx-font-size: 0.8em; }
+.mail-preview, .mail-date { -fx-font-size: 0.8em; -fx-text-fill: rgba(255,255,255,0.74); }
+.mail-date { -fx-min-width: 6.4em; -fx-alignment: top-right; }
+/* Custom JavaFX pseudo-class activated by MailCell. */
+/*noinspection CssInvalidPseudoSelector*/
+.mail-row:read .mail-sender { -fx-font-weight: normal; -fx-text-fill: rgba(255,255,255,0.74); }

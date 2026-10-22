@@ -1,25 +1,20 @@
 package com.juanpablo.evermail.model;
 
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.Value;
+import lombok.With;
+import lombok.ToString;
+import java.time.Instant;
+import java.util.UUID;
 
-import java.time.LocalDateTime;
-
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Value
+@With
+@ToString(onlyExplicitlyIncluded = true)
 public class Account {
-
-    private Integer idAccount;
-    private Integer idProfile;
-    private Integer idAddress;
-    private String signature;
-    private String accountName;
-    private String accessToken;
-    private String refreshToken;
-    private LocalDateTime tokenExpiresAt;
-    private OAuthProvider provider;
+    UUID id;
+    OAuthProvider provider;
+    String providerSubject;
+    String email;
+    String displayName;
+    String keyRef;
+    AccountStatus status;
 }

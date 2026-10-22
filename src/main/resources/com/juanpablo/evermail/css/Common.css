@@ -1,0 +1,46 @@
+/* JavaFX CSS. Dimensions use em so desktop views scale with ViewController. */
+.root, .evermail-view {
+    -fx-font-family: "Inter"; -fx-font-size: 14px;
+    -fx-base: #251a30; -fx-background: #1e1527;
+    -fx-control-inner-background: #56505d; -fx-accent: #fbbf24;
+    -fx-focus-color: #9f9dc8; -fx-faint-focus-color: transparent; -fx-text-fill: white;
+}
+.label { -fx-text-fill: white; }
+.muted { -fx-text-fill: rgba(255,255,255,0.74); }
+.small { -fx-font-size: 0.8em; }
+.title { -fx-font-size: 2em; -fx-font-weight: bold; }
+.section-title { -fx-font-size: 1.4em; -fx-font-family: "Inter SemiBold"; -fx-font-weight: normal; }
+.brand { -fx-font-family: "Inria Serif"; -fx-text-fill: #fbbf24; -fx-font-size: 3.5em; }
+.button {
+    -fx-background-color: transparent; -fx-text-fill: #9f9dc8; -fx-font-size: 1.2em;
+    -fx-border-color: #9f9dc8; -fx-border-width: 0.083333em;
+    -fx-border-radius: 0.5em; -fx-background-radius: 0.5em;
+    -fx-padding: 0.25em 0.5em; -fx-cursor: hand; -fx-graphic-text-gap: 0.4em;
+}
+.button:hover { -fx-background-color: #9f9dc8; -fx-text-fill: #251a30; }
+.button:pressed { -fx-background-color: #8885b3; }
+.button:focused { -fx-border-color: #e2caff; }
+.button:disabled { -fx-opacity: 0.45; -fx-cursor: default; }
+.button.primary { -fx-background-color: #fbbf24; -fx-text-fill: black; -fx-border-color: #fbbf24; }
+.button.primary:hover { -fx-background-color: #f3a800; }
+.button.load-more:hover { -fx-background-color: #fbbf24; -fx-text-fill: #1e1527; -fx-border-color: #fbbf24; }
+.button.icon-button { -fx-padding: 0.4em; -fx-background-color: rgba(217,217,217,0.2); -fx-border-color: transparent; }
+.button.icon-button:hover { -fx-background-color: #716580; }
+.mail-icon { -fx-min-width: 1.5em; -fx-pref-width: 1.5em; -fx-max-width: 1.5em; -fx-min-height: 1.5em; -fx-pref-height: 1.5em; -fx-max-height: 1.5em; }
+.text-field, .text-area {
+    -fx-background-color: #56505d; -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.74);
+    -fx-background-radius: 0.54545em; -fx-border-radius: 0.54545em; -fx-padding: 0.25em 0.72727em;
+}
+.text-field:focused, .text-area:focused { -fx-border-color: #9f9dc8; }
+.text-area .content { -fx-background-color: #56505d; }
+.text-area .scroll-pane, .text-area .viewport { -fx-background-color: transparent; }
+.separator .line { -fx-border-color: rgba(255,255,255,0.4) transparent transparent transparent; -fx-border-width: 0.05em; }
+.scroll-pane, .scroll-pane > .viewport { -fx-background-color: transparent; }
+.scroll-pane { -fx-padding: 0; -fx-background-insets: 0; }
+.scroll-bar { -fx-background-color: transparent; -fx-pref-width: 0.5em; -fx-pref-height: 0.5em; }
+.scroll-bar .thumb { -fx-background-color: rgba(167,167,167,0.5); -fx-background-radius: 0.6em; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button, .scroll-bar .increment-arrow, .scroll-bar .decrement-arrow { -fx-padding: 0; }
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow { -fx-shape: ""; }
+.avatar { -fx-background-color: #e0c2ff; -fx-background-radius: 100; -fx-text-fill: black; -fx-font-size: 2.5em; -fx-alignment: center; -fx-min-width: 1.5em; -fx-min-height: 1.5em; -fx-pref-width: 1.5em; -fx-pref-height: 1.5em; }
+.operation-banner, .confirmation-content { -fx-background-color: #30213e; -fx-padding: 12 18; }
+.banner-close { -fx-font-size: 1.4em; -fx-min-width: 1.6em; -fx-min-height: 1.6em; -fx-padding: 0; -fx-border-color: transparent; }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.*?>
+<?import com.juanpablo.evermail.ui.*?>
+<HBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="mailRow" stylesheets="@../css/Common.css,@../css/Mail-Row.css" styleClass="mail-row" alignment="TOP_LEFT" minWidth="0">
+<Label fx:id="avatar" text="J" styleClass="avatar"/>
+<VBox minWidth="0" HBox.hgrow="ALWAYS"><Label fx:id="sender" text="Juan Pablo" styleClass="mail-sender"/><Label fx:id="subject" text="Test Correo" styleClass="mail-subject"/><Label fx:id="preview" text="Esto es un test para la interfaz del correo de evermail a la hora de" styleClass="mail-preview" minWidth="0" maxWidth="Infinity"/></VBox>
+<Label fx:id="date" text="Hoy" styleClass="mail-date" HBox.hgrow="NEVER"/>
+</HBox>

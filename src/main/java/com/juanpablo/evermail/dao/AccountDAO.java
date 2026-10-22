@@ -1,135 +1,61 @@
 package com.juanpablo.evermail.dao;
 
-import com.juanpablo.evermail.exception.DatabaseException;
-import com.juanpablo.evermail.exception.ErrorCode;
-import com.juanpablo.evermail.model.Account;
-import com.juanpablo.evermail.model.OAuthProvider;
-import com.juanpablo.evermail.repository.SqliteConnectionProvider;
+import com.juanpablo.evermail.model.*;
+import lombok.Value;
+import lombok.ToString;
+import java.sql.*;
+import java.time.Instant;
+import java.util.*;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Direct access to the {@code account} table. Pure CRUD — it persists the
- * (already-encrypted) token columns as opaque strings and the provider as a
- * plain TEXT value. It has no knowledge of OAuth or encryption; that
- * orchestration lives in {@code AccountRepository} (see uml-dao.md, note 4).
- */
 public class AccountDAO {
-
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
-
-    private final SqliteConnectionProvider connectionProvider;
-
-    public AccountDAO(SqliteConnectionProvider connectionProvider) {
-        this.connectionProvider = connectionProvider;
+    @Value
+    @ToString(onlyExplicitlyIncluded = true)
+    public static class Row {
+        Account account;
+        String accessCipher;
+        String refreshCipher;
+        Instant expiresAt;
     }
 
-    public synchronized int insert(Account account) throws DatabaseException {
-        String sql = """
-                INSERT INTO account (id_profile, id_address, provider, signature, account_name,
-                                     access_token, refresh_token, token_expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-        try (PreparedStatement ps = connectionProvider.getConnection()
-                .prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, account.getIdProfile());
-            ps.setInt(2, account.getIdAddress());
-            ps.setString(3, account.getProvider().name());
-            ps.setString(4, account.getSignature());
-            ps.setString(5, account.getAccountName());
-            ps.setString(6, account.getAccessToken());
-            ps.setString(7, account.getRefreshToken());
-            ps.setString(8, account.getTokenExpiresAt().format(DATE_FORMAT));
-            ps.executeUpdate();
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) {
-                    return keys.getInt(1);
-                }
-                throw new DatabaseException(ErrorCode.DB_QUERY_FAILED,
-                        "Insert into account did not return a generated key");
-            }
-        } catch (SQLException e) {
-            throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "Failed to insert account", e);
+    public Row find(Connection connection, UUID id) throws SQLException {
+        return Sql.one(connection, "SELECT * FROM account WHERE id_account=?", this::map, id);
+    }
+
+    public Row findByIdentity(Connection connection, Identity identity) throws SQLException {
+        return Sql.one(connection, "SELECT * FROM account WHERE provider=? AND provider_subject=?", this::map,
+                identity.getProvider(), identity.getSubject());
+    }
+
+    public List<Row> list(Connection connection) throws SQLException {
+        return Sql.list(connection, "SELECT * FROM account ORDER BY id_account", this::map);
+    }
+
+    public void insert(Connection connection, Row row) throws SQLException {
+        Account account = row.getAccount();
+        Sql.update(connection, "INSERT INTO account VALUES(?,?,?,?,?,?,?,?,?,?)",
+                account.getId(), account.getProvider(), account.getProviderSubject(), account.getEmail(),
+                account.getDisplayName(), account.getKeyRef(), row.getAccessCipher(), row.getRefreshCipher(),
+                row.getExpiresAt(), account.getStatus());
+    }
+
+    public void update(Connection connection, Row row) throws SQLException {
+        Account account = row.getAccount();
+        if (Sql.update(connection, """
+                UPDATE account SET provider_subject=?,email=?,display_name=?,access_token_cipher=?,
+                refresh_token_cipher=?,token_expires_at=?,status=? WHERE id_account=?
+                """, account.getProviderSubject(), account.getEmail(), account.getDisplayName(),
+                row.getAccessCipher(), row.getRefreshCipher(), row.getExpiresAt(), account.getStatus(), account.getId()) != 1) {
+            throw new SQLException("Account not found");
         }
     }
 
-    public synchronized Account findById(int idAccount) throws DatabaseException {
-        String sql = "SELECT * FROM account WHERE id_account = ?";
-        try (PreparedStatement ps = connectionProvider.getConnection().prepareStatement(sql)) {
-            ps.setInt(1, idAccount);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? mapRow(rs) : null;
-            }
-        } catch (SQLException e) {
-            throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "Failed to find account by id", e);
-        }
-    }
-
-    public synchronized List<Account> findAll() throws DatabaseException {
-        String sql = "SELECT * FROM account";
-        List<Account> accounts = new ArrayList<>();
-        try (PreparedStatement ps = connectionProvider.getConnection().prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                accounts.add(mapRow(rs));
-            }
-            return accounts;
-        } catch (SQLException e) {
-            throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "Failed to list accounts", e);
-        }
-    }
-
-    public synchronized void update(Account account) throws DatabaseException {
-        String sql = """
-                UPDATE account
-                SET id_profile = ?, id_address = ?, provider = ?, signature = ?, account_name = ?,
-                    access_token = ?, refresh_token = ?, token_expires_at = ?
-                WHERE id_account = ?
-                """;
-        try (PreparedStatement ps = connectionProvider.getConnection().prepareStatement(sql)) {
-            ps.setInt(1, account.getIdProfile());
-            ps.setInt(2, account.getIdAddress());
-            ps.setString(3, account.getProvider().name());
-            ps.setString(4, account.getSignature());
-            ps.setString(5, account.getAccountName());
-            ps.setString(6, account.getAccessToken());
-            ps.setString(7, account.getRefreshToken());
-            ps.setString(8, account.getTokenExpiresAt().format(DATE_FORMAT));
-            ps.setInt(9, account.getIdAccount());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "Failed to update account", e);
-        }
-    }
-
-    public synchronized void delete(int idAccount) throws DatabaseException {
-        String sql = "DELETE FROM account WHERE id_account = ?";
-        try (PreparedStatement ps = connectionProvider.getConnection().prepareStatement(sql)) {
-            ps.setInt(1, idAccount);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            throw new DatabaseException(ErrorCode.DB_QUERY_FAILED, "Failed to delete account", e);
-        }
-    }
-
-    private Account mapRow(ResultSet rs) throws SQLException {
-        Account account = new Account();
-        account.setIdAccount(rs.getInt("id_account"));
-        account.setIdProfile(rs.getInt("id_profile"));
-        account.setIdAddress(rs.getInt("id_address"));
-        account.setProvider(OAuthProvider.valueOf(rs.getString("provider")));
-        account.setSignature(rs.getString("signature"));
-        account.setAccountName(rs.getString("account_name"));
-        account.setAccessToken(rs.getString("access_token"));
-        account.setRefreshToken(rs.getString("refresh_token"));
-        account.setTokenExpiresAt(LocalDateTime.parse(rs.getString("token_expires_at"), DATE_FORMAT));
-        return account;
+    private Row map(ResultSet rs) throws SQLException {
+        Account account = new Account(UUID.fromString(rs.getString("id_account")),
+                OAuthProvider.valueOf(rs.getString("provider")), rs.getString("provider_subject"),
+                rs.getString("email"), rs.getString("display_name"), rs.getString("key_ref"),
+                AccountStatus.valueOf(rs.getString("status")));
+        Long expiry = rs.getObject("token_expires_at") == null ? null : rs.getLong("token_expires_at");
+        return new Row(account, rs.getString("access_token_cipher"), rs.getString("refresh_token_cipher"),
+                expiry == null ? null : Instant.ofEpochMilli(expiry));
     }
 }

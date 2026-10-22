@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.*?>
+<?import com.juanpablo.evermail.ui.*?>
+<ScrollPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:id="viewport" fx:controller="com.juanpablo.evermail.ui.ViewController" stylesheets="@../css/Common.css,@../css/Logout.css" styleClass="evermail-view,logout-view" fitToWidth="true" hbarPolicy="NEVER" prefWidth="570" prefHeight="550" minWidth="0"><content><StackPane fx:id="layout" minWidth="0" alignment="TOP_CENTER">
+<StackPane maxWidth="570" minWidth="0" minHeight="-Infinity" maxHeight="-Infinity">
+<VBox mouseTransparent="true"><Region prefHeight="142" minHeight="-Infinity"/><Region styleClass="logout-card" VBox.vgrow="ALWAYS"/></VBox>
+<VBox styleClass="logout-content" alignment="CENTER" minWidth="0">
+<FigmaImage source="102-316-imgLogoEvermail1.png" fitHeightOnly="true" styleClass="logout-logo"/><Label text="Cerrar Sesión en Evermail" styleClass="title" wrapText="true" minHeight="-Infinity"/>
+<Label text="Se eliminarán los datos locales de esta cuenta" styleClass="logout-copy" wrapText="true" minHeight="-Infinity" textAlignment="CENTER"/>
+<Label text="tus datos permanecerán en tus cuentas de Google y Microsoft" styleClass="logout-copy" wrapText="true" minHeight="-Infinity" textAlignment="CENTER"/>
+<FlowPane styleClass="logout-buttons"><AnimatedButton fx:id="cancelButton" text="Cancelar" styleClass="button,outline"/><AnimatedButton fx:id="confirmLogoutButton" text="Cerrar Sesión" styleClass="button,primary"/></FlowPane>
+</VBox></StackPane></StackPane></content></ScrollPane>

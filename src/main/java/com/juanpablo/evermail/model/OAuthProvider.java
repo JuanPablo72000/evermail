@@ -63,5 +63,12 @@ public enum OAuthProvider {
     public String getImapHost() { return imapHost; }
     public int getImapPort() { return imapPort; }
     public String getSmtpHost() { return smtpHost; }
+    public String getSmtpHost(String verifiedSubject) {
+        // Identity subjects include the issuer validated by OidcTokenValidator.
+        if (this == MICROSOFT && verifiedSubject != null && verifiedSubject.startsWith(
+                "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0|"))
+            return "smtp-mail.outlook.com";
+        return smtpHost;
+    }
     public int getSmtpPort() { return smtpPort; }
 }
