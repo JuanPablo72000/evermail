@@ -34,7 +34,7 @@ public final class ResponsiveGrid extends GridPane {
         double[] ratios = next == 1 ? new double[]{100}
                 : mode.equals("login") ? new double[]{56.7, 43.3}
                 : next == 3 ? new double[]{26, 43.53125, 30.46875}
-                : mode.equals("reader") ? new double[]{24.63542, 75.36458} : new double[]{26, 74};
+                : new double[]{26, 74};
         for (double ratio : ratios) {
             ColumnConstraints column = new ColumnConstraints();
             column.setPercentWidth(ratio); column.setMinWidth(0); column.setHgrow(Priority.ALWAYS);

@@ -1,6 +1,9 @@
 # Previsualizar la interfaz sin iniciar sesión
 
-La ventana utiliza el logo de Evermail como icono. En Windows 11, su barra de
+La ventana utiliza `images/Icono_Evermail.png`, con exterior transparente, como
+icono de Evermail. La versión `images/Icono_Evermail.ico` contiene tamaños de
+16 a 256 píxeles para accesos directos de Windows y el futuro instalador.
+En Windows 11, su barra de
 título nativa adopta el morado `#251a30` de la aplicación con texto blanco;
 conserva minimizar, maximizar, cerrar y redimensionar. Los sistemas que no
 admiten estos colores conservan la decoración del sistema. El cambio se ve al

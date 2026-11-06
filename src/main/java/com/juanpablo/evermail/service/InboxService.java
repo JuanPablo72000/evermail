@@ -11,7 +11,6 @@ public class InboxService {
     private final MailRepository mails;
     private final AccountCoordinator coordinator;
     private final java.util.function.BooleanSupplier imageProxyConfigured;
-    private final java.util.LinkedHashMap<UUID, UUID> retainedBodies = new java.util.LinkedHashMap<>(128, .75f, true);
 
     public InboxService(MailGateway gateway, MailRepository mails, AccountCoordinator coordinator) {
         this(gateway, mails, coordinator, () -> new ImageProxyClient(new EnvConfig()).configured());
@@ -54,7 +53,6 @@ public class InboxService {
             try (InboxSession session = gateway.openInbox(accountId, deadline)) {
                 RemoteInboxPage page = session.fetchBefore(cursor, AppConstants.MAX_EMAILS_DISPLAYED, deadline);
                 deadline.check();
-                deadline.check();
                 mails.saveInboxPage(accountId, page);
                 return readCached(accountId, cursor);
             }
@@ -64,6 +62,10 @@ public class InboxService {
     public MailHeader openHeader(UUID accountId, UUID mailId) throws EvermailException {
         return mails.findHeader(accountId, mailId);
     }
+
+    /** Metadata only: safe to release from the coordinator without doing disk I/O. */
+    public void closeReader(UUID mailId) { mails.releaseBody(mailId); }
+    public void selectReader(UUID mailId) { mails.protectBody(mailId); }
 
     public MailContent loadContent(UUID accountId, UUID mailId, Deadline deadline) throws EvermailException {
         return loadContent(accountId, mailId, deadline, false);
@@ -92,7 +94,7 @@ public class InboxService {
                     }
                 }
             }
-            retainBody(accountId, mailId);
+            mails.retainBody(mailId);
             return cached;
         }
         return coordinator.exclusive(accountId, deadline, () -> {
@@ -105,11 +107,12 @@ public class InboxService {
             if (header.getRemoteId() == null) {
                 throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Sent content is unavailable");
             }
-            try (InboxSession session = gateway.openInbox(accountId, deadline)) {
+            try (var reservation = mails.reserveDownload(mailId);
+                 InboxSession session = gateway.openInbox(accountId, deadline)) {
                 RemoteMailContent content = session.fetchContent(header.getRemoteId(), deadline);
                 deadline.check();
-                mails.saveContent(accountId, mailId, content);
-                retainBody(accountId, mailId);
+                mails.saveContent(accountId, mailId, content, reservation);
+                mails.retainBody(mailId);
                 deadline.check();
                 MailContent result = mails.readContent(accountId, mailId);
                 deadline.check();
@@ -127,13 +130,4 @@ public class InboxService {
         mails.markRead(accountId, mailId);
     }
 
-    /** Bound session bodies to two pages; headers remain available for pagination. */
-    private synchronized void retainBody(UUID accountId, UUID mailId) throws EvermailException {
-        retainedBodies.put(mailId, accountId);
-        while (retainedBodies.size() > 100) {
-            var oldest = retainedBodies.firstEntry();
-            mails.discardBody(oldest.getValue(), oldest.getKey());
-            retainedBodies.remove(oldest.getKey());
-        }
-    }
 }

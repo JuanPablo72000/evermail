@@ -25,6 +25,7 @@ public record OperationError(ErrorCode code, String message) {
             case LOCAL_SAVE_PENDING -> "El guardado local está pendiente. No vuelvas a enviar el correo.";
             case SESSION_UNAVAILABLE -> "La sesión no está disponible para esta operación.";
             case MAIL_NOT_FOUND -> "El correo ya no está disponible.";
+            case STORAGE_LIMIT_REACHED -> "No hay espacio suficiente dentro del límite de 2 GB de Evermail o en el disco. No se guardaron datos nuevos. Libera espacio y vuelve a intentarlo.";
             case DB_CONNECTION_FAILED, DB_QUERY_FAILED, DB_MIGRATION_FAILED,
                     CRYPTO_OPERATION_FAILED, KEY_NOT_FOUND -> "No se pudo acceder al almacenamiento local.";
             default -> "No se pudo completar la operación de correo.";

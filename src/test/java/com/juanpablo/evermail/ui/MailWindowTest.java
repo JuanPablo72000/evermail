@@ -57,6 +57,75 @@ class MailWindowTest {
         fx(() -> null);
     }
 
+    @Test void readerNavigationButtonsFollowSelectionAndDisableAtBoundaries() throws Exception {
+        ready();
+        MailHeader second = new MailHeader(UUID.randomUUID(), account.getId(), MailDirection.INBOX,
+                new RemoteMailId(1, 2), null, null, "second@example.com", "Second", "Second mail",
+                Instant.now(), false, false);
+        fx(() -> {
+            button("refreshButton").fire();
+            backend.inbox.complete(new InboxPage(List.of(mail, second), null, false, false, false));
+            return null;
+        });
+        fx(() -> {
+            ListView<?> list = (ListView<?>) node("mailList");
+            list.getSelectionModel().select(0);
+            list.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,"","",KeyCode.ENTER,false,false,false,false));
+            assertTrue(button("previousButton").isDisabled());
+            assertFalse(button("nextButton").isDisabled());
+            button("nextButton").fire();
+            assertTrue(button("nextButton").isDisabled());
+            assertFalse(button("previousButton").isDisabled());
+            backend.header.complete(second);
+            return null;
+        });
+        fx(() -> {
+            assertTrue(((Label) node("readerSubject")).getText().contains("Second mail"));
+            button("previousButton").fire();
+            assertTrue(button("previousButton").isDisabled());
+            assertFalse(button("nextButton").isDisabled());
+            return null;
+        });
+    }
+
+    @Test void reauthorizeFromReaderReturnsToInboxAndLoadsFreshMessages() throws Exception {
+        ready();
+        fx(() -> {
+            ListView<?> list = (ListView<?>) node("mailList");
+            list.getSelectionModel().select(0);
+            list.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,"","",KeyCode.ENTER,false,false,false,false));
+            backend.header.complete(mail);
+            return null;
+        });
+        fx(() -> {
+            backend.session = new SessionSnapshot(SessionSnapshot.Phase.REAUTH_REQUIRED, account, backend.session.version());
+            backend.content.result.complete(OperationResult.failure(new OperationError(ErrorCode.REAUTH_REQUIRED,"Autoriza la cuenta")));
+            return null;
+        });
+        fx(() -> {
+            button("reauthorize").fire();
+            assertTrue(button("googleButton").isDisabled());
+            backend.session = new SessionSnapshot(SessionSnapshot.Phase.READY, account, backend.session.version());
+            backend.login.complete(account);
+            return null;
+        });
+        fx(() -> {
+            assertNotNull(node("mailList"));
+            assertNull(window.root().lookup("#bodyHost"));
+            assertEquals(PresentationBackend.InboxAction.REFRESH, backend.action);
+            assertTrue(button("refreshButton").isDisabled());
+            backend.inbox.complete(new InboxPage(List.of(mail),null,false,false,false));
+            return null;
+        });
+        fx(() -> {
+            assertFalse(button("refreshButton").isDisabled());
+            assertFalse(node("operationBanner").isVisible());
+            assertEquals(1, ((ListView<?>) node("mailList")).getItems().size());
+            assertNull(backend.logout);
+            return null;
+        });
+    }
+
     @Test void loginButtonsInvokeBothProvidersAndSupportCancellation() throws Exception {
         fx(() -> { backend.session = new SessionSnapshot(SessionSnapshot.Phase.LOGIN_REQUIRED,null,backend.session.version());
             backend.startup.complete(new StartupResult(null,StartupStatus.LOGIN_REQUIRED)); return null; });

@@ -92,3 +92,28 @@ pendiente; requiere controlar desconexiones y cerrar los recursos al cambiar de
 cuenta o cerrar sesión. El comando de medición ahora informa `READABLE_BACKEND_MS`,
 `READABLE_WITHIN_5S` y la cantidad de imágenes incorporadas como datos, además del
 total con imágenes. No imprime el contenido ni las URLs de las imágenes.
+
+## Revisión del 4 de noviembre de 2026
+
+Las mediciones anteriores son históricas. El código actual reutiliza la conexión
+IMAP y entrega el cuerpo antes de terminar las imágenes. Esta revisión identifica
+dos fuentes locales de espera, sin una nueva medición contra proveedores reales:
+
+- La precarga y la apertura comparten el trabajador de cuenta. Una descarga de
+  precarga ya iniciada puede retrasar el correo solicitado; las solicitudes del
+  usuario tienen prioridad entre descargas, sin interrumpir la activa.
+- Cada escritura calculaba dos veces el presupuesto de almacenamiento. Cada
+  cálculo recorre las rutas de aplicación/runtime, dependencias, cachés nativas
+  identificables y datos. Esto también ocurría al marcar un mensaje como visto,
+  antes de entregar su cuerpo al lector.
+
+Se elimina el segundo cálculo dentro de la misma operación de escritura. Se usa
+la medición recién obtenida para establecer `max_page_count`; la siguiente
+escritura vuelve a medir, y la limpieza sigue recalculando tras retirar contenido.
+No se conserva una estimación del disco entre operaciones ni se relaja el límite
+de 2.000.000.000 bytes. La prueba de marcado verifica una medición por escritura;
+las pruebas de presión de espacio siguen verificando limpieza y rollback.
+
+La latencia de IMAP, la renovación de credenciales y las imágenes externas pueden
+añadir espera. No se atribuye el episodio del usuario a una única causa ni se
+promete una reducción porcentual del tiempo total a partir de estas pruebas.

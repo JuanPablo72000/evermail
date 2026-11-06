@@ -53,6 +53,22 @@ class AuthServiceTest extends BackendFixture {
     }
 
     @Test
+    void expiredRejectedCredentialsCanBeReauthorizedWithoutLogout() throws Exception {
+        mails.saveInboxPage(account.getId(), page(1, 1, 1, false));
+        accounts.activate(account, new OAuthCredentials("expired", "revoked", Instant.now().minusSeconds(1)));
+        AuthService auth = auth(true, "replacement-refresh");
+        assertThrows(OAuthAuthenticationException.class, () -> auth.ensureCredentials(account.getId(), budget()));
+        assertEquals(AccountStatus.REAUTH_REQUIRED, accounts.require(account.getId()).getStatus());
+        Account restored = auth.login(OAuthProvider.GOOGLE, new CancellationToken());
+        assertEquals(account.getId(), restored.getId());
+        assertEquals(AccountStatus.ACTIVE, accounts.require(account.getId()).getStatus());
+        assertEquals("new-access", auth.ensureCredentials(account.getId(), budget()).getAccessToken());
+        assertEquals("replacement-refresh", accounts.readCredentials(account.getId()).getRefreshToken());
+        assertEquals(1, count("mail"));
+        assertEquals(1, refreshes.get());
+    }
+
+    @Test
     void simultaneousRefreshesUseSingleRotatingTokenRequest() throws Exception {
         accounts.activate(account, new OAuthCredentials("expired", "refresh", Instant.now().minusSeconds(1)));
         AuthService auth = auth(false, "refresh");

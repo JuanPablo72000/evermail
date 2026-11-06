@@ -38,7 +38,7 @@ public class OutboxRepository {
         OutboxDAO.Row row = new OutboxDAO.Row(request.getSubmissionId(), account.getId(),
                 "<" + request.getSubmissionId() + "@evermail.local>", request.getSubject(), encrypted,
                 DeliveryState.PENDING, now, now, null);
-        boolean created = transactions.write(c -> {
+        boolean created = transactions.write(storageEstimate(encrypted, request.getSubject(), normalized), c -> {
             if (outbox.find(c, account.getId(), request.getSubmissionId()) != null) {
                 return false;
             }
@@ -97,7 +97,7 @@ public class OutboxRepository {
         Account account = accounts.require(accountId);
         UUID mailId = UUID.nameUUIDFromBytes(("sent/" + id).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         String cipher = security.encrypt(message.getPlainText(), keys.read(account.getKeyRef()), new CryptoContext(accountId, mailId, "body"));
-        return transactions.write(c -> {
+        return transactions.write(storageEstimate(cipher, message.getSubject(), message.getRecipients()), c -> {
             OutboxDAO.Row row = outbox.find(c, accountId, id);
             if (row.getState() == DeliveryState.RECORDED) {
                 return new SendResult(id, DeliveryState.RECORDED, mailId, null);
@@ -116,5 +116,11 @@ public class OutboxRepository {
 
     public List<OutboxDAO.Row> recoverable(UUID accountId) throws EvermailException {
         return transactions.read(c -> outbox.recoverable(c, accountId));
+    }
+
+    private static long storageEstimate(String cipher, String subject, List<Recipient> addresses) {
+        long recipients = addresses.stream().mapToLong(recipient ->
+                1024L + 4L * (recipient.getEmail().length() + Objects.toString(recipient.getDisplayName(), "").length())).sum();
+        return 64 * 1024 + 2L * cipher.length() + 4L * subject.length() + recipients;
     }
 }

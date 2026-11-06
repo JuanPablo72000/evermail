@@ -9,7 +9,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.function.BiFunction;
 
-/** Backend composition root. It is deliberately not connected to App or any controller yet. */
+/** Owns the services and resources used by the desktop application's backend. */
 @Getter
 public class BackendContext implements AutoCloseable {
     private final TransactionManager transactions;
@@ -31,9 +31,15 @@ public class BackendContext implements AutoCloseable {
     /** Allows embedding the backend with a different mail transport. */
     public BackendContext(Path database, KeyStoreService keys, OAuthGateway oauth, EnvConfig config,
                           BiFunction<AuthService, AccountRepository, MailGateway> gatewayFactory) throws EvermailException {
+        this(database, keys, oauth, config, gatewayFactory, StorageBudget.local(database));
+    }
+
+    private BackendContext(Path database, KeyStoreService keys, OAuthGateway oauth, EnvConfig config,
+                           BiFunction<AuthService, AccountRepository, MailGateway> gatewayFactory,
+                           StorageBudget budget) throws EvermailException {
         this.keys = keys;
         SecurityUtil security = new SecurityUtil();
-        transactions = new TransactionManager(new SqliteConnectionProvider(database));
+        transactions = new TransactionManager(new SqliteConnectionProvider(budget));
         AccountCoordinator coordinator = new AccountCoordinator();
         accounts = new AccountRepository(transactions, security, keys);
         mails = new MailRepository(transactions, accounts, security, keys);
@@ -55,7 +61,9 @@ public class BackendContext implements AutoCloseable {
         SecurityUtil security = new SecurityUtil();
         OsKeyStoreService keys = new OsKeyStoreService(security);
         try {
-            return new BackendContext(StorageConfig.databasePath(), keys, new OAuthClient(), new EnvConfig());
+            Path database = StorageConfig.databasePath();
+            return new BackendContext(database, keys, new OAuthClient(), new EnvConfig(),
+                    MailSessionProvider::new, StorageBudget.application(database));
         } catch (Exception e) {
             try {
                 keys.close();

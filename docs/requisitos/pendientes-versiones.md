@@ -2,10 +2,16 @@
 
 Acuerdos registrados con el usuario el 27 de septiembre de 2026. Este documento conserva decisiones de alcance; no indica que las funciones estén implementadas.
 
-## Próxima versión
+## Alcance de la versión 1.0 — 4 de noviembre de 2026
+
+- Límite total de 2 GB con limpieza automática de cuerpos antiguos de la caché local. Incluye aplicación, datos y reserva de operación; no elimina correos del proveedor ni enviados.
+- Botones Anterior/Siguiente funcionales dentro de la bandeja cargada. No descargan una página adicional automáticamente.
+- Las demás funciones pendientes pasan a futuras versiones. Microsoft continúa pendiente de resolver; la versión de uso personal se basa en los flujos confirmados con Google.
+- No se genera todavía ejecutable `.exe` ni instalador.
+
+## Futuras versiones
 
 - Incorporar el envío de adjuntos junto con mensajes de texto plano. Incluir selector de archivos, drag and drop y lista con nombre, tamaño y opción de quitar archivos. La integración debe contemplar validación, conservación de archivos para la cola de envío y reintentos, y limpieza posterior.
-- Habilitar los controles **Anterior** y **Siguiente** en el lector para cambiar entre correos sin volver a la bandeja de entrada. Referencia visual aportada por el usuario: flecha izquierda junto a «Anterior» y flecha derecha junto a «Siguiente».
 - Hacer funcional la pestaña **Enviados**, para consultar los correos enviados.
 
 ## Fix futuro, no crítico

@@ -22,7 +22,6 @@
 .sample-table .label { -fx-padding: 0.35em 0.5em; -fx-border-color: #e8e1f2; -fx-border-width: 0.5; }
 .sample-table .table-heading { -fx-background-color: #ece5f9; -fx-text-fill: #46159b; -fx-font-weight: bold; }
 
-.reader-view .sidebar { -fx-padding: 0.55em 0 2.2em 1.4em; }
 .reader-toolbar .action-button { -fx-pref-width: 9.55556em; -fx-padding: 0 0.2em; }
 #previousButton .mail-icon, #nextButton .mail-icon { -fx-min-width: 0.58333em; -fx-pref-width: 0.58333em; -fx-max-width: 0.58333em; }
 #formattedButton { -fx-padding: 0.25em 0.15em; }

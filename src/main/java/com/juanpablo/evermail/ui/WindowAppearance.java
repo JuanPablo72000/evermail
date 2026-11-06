@@ -18,7 +18,7 @@ public final class WindowAppearance {
 
     public static void install(Stage stage) {
         String logo = Objects.requireNonNull(WindowAppearance.class.getResource(
-                "/com/juanpablo/evermail/images/Logo_Evermail.png")).toExternalForm();
+                "/com/juanpablo/evermail/images/Icono_Evermail.png")).toExternalForm();
         stage.getIcons().setAll(new Image(logo, 32, 32, true, true),
                 new Image(logo, 256, 256, true, true));
         stage.addEventHandler(WindowEvent.WINDOW_SHOWN, event -> applyCaption(stage));

@@ -11,6 +11,15 @@
 
 ## 1. Propósito y uso
 
+**Actualización de alcance, 4 de noviembre de 2026:** la versión 1.0 añade
+Anterior/Siguiente en el lector, dentro de los mensajes ya cargados, y un límite
+total de 2 GB con limpieza automática de cuerpos de caché. Incluye aplicación,
+datos y reserva de operación. Se conservan encabezados y se protegen enviados,
+cuentas y registros de envío; no se eliminan correos remotos. Las demás funciones
+pendientes se aplazan, incluido Microsoft. Los flujos confirmados con Google
+constituyen el alcance de uso personal. No se genera aún `.exe` ni instalador.
+Esta actualización prevalece sobre las exclusiones y condiciones históricas que siguen.
+
 **Actualización de alcance, 11 de octubre de 2026:** el MVP se destina al uso
 personal. El usuario acepta posponer el cumplimiento de RNF-09; sus cifras
 siguen siendo objetivos, no garantías. Confirmó Google, restauración de sesión

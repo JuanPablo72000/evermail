@@ -9,6 +9,9 @@ import java.time.Instant;
 import java.util.*;
 
 public class MailRepository {
+    // MIME limits bound the plaintext/inline images; allow JSON escaping and encrypted Base64 expansion.
+    private static final long DOWNLOAD_RESERVATION = 24L * 1024 * 1024;
+    private static final com.google.gson.Gson JSON = new com.google.gson.Gson();
     private final TransactionManager transactions;
     private final AccountRepository accounts;
     private final SecurityUtil security;
@@ -58,7 +61,7 @@ public class MailRepository {
         if (page.getUidValidity() < 1 || page.getLowerUid() < 1 || page.getUpperUid() < page.getLowerUid()) {
             throw new MailFetchException(ErrorCode.IMAP_FETCH_FAILED, "Invalid remote page coverage");
         }
-        transactions.write(c -> {
+        transactions.write(pageStorageEstimate(page), c -> {
             InboxStateDAO.Row old = states.find(c, accountId);
             if (old != null && old.getValidity() != page.getUidValidity()) {
                 Sql.update(c, "DELETE FROM mail WHERE id_account=? AND direction='INBOX'", accountId);
@@ -114,6 +117,22 @@ public class MailRepository {
         return row.getHeader();
     }
 
+    private static long pageStorageEstimate(RemoteInboxPage page) {
+        long bytes = 64 * 1024;
+        for (RemoteMessage message : page.getMessages()) {
+            RemoteMailHeader header = message.getHeader();
+            bytes += 2048L + 4L * (Objects.toString(header.getSubject(), "").length()
+                    + Objects.toString(header.getSenderName(), "").length()
+                    + Objects.toString(header.getSenderEmail(), "").length()
+                    + Objects.toString(header.getMessageId(), "").length());
+            for (Recipient recipient : message.getRecipients()) {
+                bytes += 1024L + 4L * (recipient.getEmail().length()
+                        + Objects.toString(recipient.getDisplayName(), "").length());
+            }
+        }
+        return bytes;
+    }
+
     public MailContent readContent(UUID accountId, UUID mailId) throws EvermailException {
         Account account = accounts.require(accountId);
         MailDAO.Row row = transactions.read(c -> mails.find(c, accountId, mailId));
@@ -131,7 +150,7 @@ public class MailRepository {
                     row.getHeader().getDirection() == MailDirection.INBOX, addresses);
         }
         try {
-            StoredBody body = new com.google.gson.Gson().fromJson(decoded, StoredBody.class);
+            StoredBody body = JSON.fromJson(decoded, StoredBody.class);
             if (body == null || body.plainText() == null) throw new IllegalArgumentException("Invalid body");
             return new MailContent(mailId, body.plainText(), body.html(), body.blockedRemoteImages(), false, addresses,
                     body.html() != null && body.imageReferencesVersion() < 2);
@@ -141,11 +160,25 @@ public class MailRepository {
     }
 
     public void saveContent(UUID accountId, UUID mailId, RemoteMailContent content) throws EvermailException {
+        try (var reservation = transactions.reserveCache(mailId, 0)) {
+            saveContent(accountId, mailId, content, reservation);
+        }
+    }
+
+    public TransactionManager.CacheReservation reserveDownload(UUID mailId) throws EvermailException {
+        return transactions.reserveCache(mailId, DOWNLOAD_RESERVATION);
+    }
+
+    public void saveContent(UUID accountId, UUID mailId, RemoteMailContent content,
+                            TransactionManager.CacheReservation reservation) throws EvermailException {
         Account account = accounts.require(accountId);
-        String serialized = new com.google.gson.Gson().toJson(new StoredBody(content.getPlainText(), content.getHtml(), content.isBlockedRemoteImages(), 2));
+        String serialized = JSON.toJson(new StoredBody(content.getPlainText(), content.getHtml(), content.isBlockedRemoteImages(), 2));
         String encrypted = security.encrypt(serialized, keys.read(account.getKeyRef()),
                 new CryptoContext(accountId, mailId, "body:hybrid-v1"));
-        transactions.write(c -> {
+        long recipientBytes = content.getRecipients().stream().mapToLong(recipient ->
+                1024L + 4L * (recipient.getEmail().length() + Objects.toString(recipient.getDisplayName(), "").length())).sum();
+        // Additional pages cover row/index overhead; the SQLite ceiling remains the final bound.
+        reservation.save(encrypted.length() * 2L + recipientBytes + 64 * 1024, c -> {
             if (Sql.update(c, "UPDATE mail SET body_cipher=?,body_format=1 WHERE id_account=? AND id_mail=?", encrypted, accountId, mailId) != 1) {
                 throw new MailFetchException(ErrorCode.MAIL_NOT_FOUND, "Mail disappeared during download");
             }
@@ -173,11 +206,7 @@ public class MailRepository {
             Sql.update(c, "DELETE FROM inbox_state");
             return null;
         });
-        // DELETE alone leaves the allocated pages on disk. Run outside a transaction.
-        transactions.read(c -> {
-            try (var statement = c.createStatement()) { statement.execute("VACUUM"); }
-            return null;
-        });
+        // auto_vacuum=FULL returns freed pages on commit without creating a temporary database copy.
     }
 
     public void discardBody(UUID accountId, UUID mailId) throws EvermailException {
@@ -186,6 +215,14 @@ public class MailRepository {
             return null;
         });
     }
+
+    public void retainBody(UUID mailId) throws EvermailException {
+        transactions.touchBody(mailId);
+        transactions.trimInboxBodies();
+    }
+
+    public void protectBody(UUID mailId) { transactions.selectBody(mailId); }
+    public void releaseBody(UUID mailId) { transactions.releaseBody(mailId); }
 
     public void remove(UUID accountId, UUID mailId) throws EvermailException {
         transactions.write(c -> {

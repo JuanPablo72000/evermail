@@ -48,6 +48,13 @@ La integración conserva PKCE y validación OIDC, exige TLS para el correo y evi
 
 ## Estado actual
 
+**Alcance de la versión 1.0, actualizado el 4 de noviembre de 2026:** se incorporan
+Anterior/Siguiente en el lector y un límite total de 2 GB con limpieza automática
+de cuerpos antiguos de la caché. Los encabezados permanecen para recuperar el
+contenido al abrirlo otra vez. Consulta [almacenamiento y limpieza](docs/desarrollo/descarga-y-limpieza.md).
+Las demás funciones pendientes se dejan para futuras versiones, incluido resolver
+Microsoft. No se ha generado `.exe` ni instalador para esta versión.
+
 **Integración de interfaz y backend implementada; Google confirmado por el usuario,
 Microsoft personal con fallos de IMAP/SMTP aún pendientes.**
 

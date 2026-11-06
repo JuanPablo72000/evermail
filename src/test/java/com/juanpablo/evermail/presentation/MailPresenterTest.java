@@ -110,6 +110,70 @@ class MailPresenterTest {
         assertEquals(previous, backend.lastCursor);
     }
 
+    @Test void adjacentNavigationFollowsLoadedPagesAndStopsAtBothEnds() {
+        inbox(mail(3), mail(2));
+        presenter.openMail(mail(3).getId());
+        assertFalse(presenter.state().canReadPrevious());
+        assertTrue(presenter.state().canReadNext());
+        presenter.previousMail();
+        assertEquals(1, backend.headers.size());
+        presenter.nextMail();
+        assertEquals(mail(2).getId(), presenter.state().reader().mailId());
+        assertFalse(presenter.state().canReadNext());
+        assertTrue(presenter.state().canReadPrevious());
+        presenter.nextMail();
+        assertEquals(2, backend.headers.size());
+        presenter.previousMail();
+        assertEquals(mail(3).getId(), presenter.state().reader().mailId());
+        assertEquals(Route.READER, presenter.state().route());
+        presenter.backToInbox();
+        presenter.nextMail();
+        assertFalse(presenter.state().canReadNext());
+        assertEquals(3, backend.headers.size());
+    }
+
+    @Test void rapidNavigationCancelsOldContentAndImagesAndPreservesDraft() {
+        backend.enhanceImages = true;
+        inbox(mail(3), mail(2), mail(1));
+        presenter.editDraft(draft);
+        presenter.openMail(mail(3).getId());
+        backend.headers.getLast().complete(mail(3)); flush();
+        body(mail(3).getId(), true);
+        var oldImages = backend.images.getLast();
+        var oldPresentation = presenter.state().reader().content();
+        presenter.nextMail();
+        assertTrue(oldImages.cancelled);
+        backend.headers.getLast().complete(mail(2)); flush();
+        var oldBody = backend.contents.getLast();
+        presenter.nextMail();
+        assertTrue(oldBody.cancelled);
+        oldImages.complete(oldPresentation);
+        oldBody.complete(oldPresentation);
+        flush();
+        assertEquals(mail(1).getId(), presenter.state().reader().mailId());
+        assertNull(presenter.state().reader().content());
+        backend.headers.getLast().fail(ErrorCode.MAIL_NOT_FOUND); flush();
+        assertTrue(presenter.state().canReadPrevious());
+        presenter.previousMail();
+        assertEquals(mail(2).getId(), presenter.state().reader().mailId());
+        assertEquals(draft, presenter.state().compose().draft());
+        assertFalse(presenter.state().inbox().items().get(1).isRead());
+    }
+
+    @Test void navigationCrossesExplicitlyLoadedPageBoundaryAndInvalidatesOnSessionChange() {
+        ready(SessionSnapshot.Phase.OFFLINE);
+        presenter.loadInbox(); backend.inboxes.getLast().complete(page(true, mail(3), mail(2))); flush();
+        presenter.loadMore(); backend.inboxes.getLast().complete(page(false, mail(1))); flush();
+        presenter.openMail(mail(2).getId());
+        presenter.nextMail();
+        assertEquals(mail(1).getId(), presenter.state().reader().mailId());
+        assertEquals(2, backend.inboxes.size());
+        backend.session = new SessionSnapshot(SessionSnapshot.Phase.LOGIN_REQUIRED, null, 2);
+        presenter.previousMail();
+        assertNull(presenter.state().reader().mailId());
+        assertFalse(presenter.state().canReadPrevious());
+    }
+
     @Test void readerLoadsHeaderThenBodyAndSwitchesFormatsWithoutMoreRequests() {
         inbox(mail(1)); presenter.openMail(mail(1).getId());
         assertEquals(ReaderPhase.HEADER_LOADING, presenter.state().reader().phase());
@@ -267,6 +331,48 @@ class MailPresenterTest {
         presenter.requestDiscard(); presenter.confirmDiscard(); assertTrue(presenter.state().compose().draft().isEmpty());
         presenter.editDraft(draft); presenter.send(); presenter.requestDiscard(); presenter.confirmDiscard();
         assertEquals(draft, presenter.state().compose().draft());
+    }
+
+    @Test void reauthorizationFromReaderRefreshesImmediatelyAndRejectsOldSessionResults() {
+        inbox(mail(1));
+        presenter.editDraft(draft);
+        presenter.openMail(mail(1).getId());
+        backend.headers.getLast().complete(mail(1)); flush();
+        backend.session = new SessionSnapshot(SessionSnapshot.Phase.REAUTH_REQUIRED, account, backend.session.version());
+        backend.contents.getLast().fail(ErrorCode.REAUTH_REQUIRED); flush();
+        presenter.refreshInbox();
+        var oldInbox = backend.inboxes.getLast();
+
+        presenter.login(OAuthProvider.GOOGLE);
+        backend.session = new SessionSnapshot(SessionSnapshot.Phase.READY, account, backend.session.version());
+        backend.login.complete(account); flush();
+        assertEquals(Route.INBOX, presenter.state().route());
+        assertEquals(PresentationBackend.InboxAction.REFRESH, backend.actions.getLast());
+        assertTrue(presenter.state().inbox().loading());
+        assertNull(presenter.state().reader().mailId());
+        assertEquals(draft, presenter.state().compose().draft());
+
+        oldInbox.fail(ErrorCode.REAUTH_REQUIRED); flush();
+        assertTrue(presenter.state().inbox().loading());
+        assertNull(presenter.state().inbox().error());
+        backend.inboxes.getLast().complete(page(false, mail(2), mail(1))); flush();
+        assertEquals(List.of(mail(2), mail(1)), presenter.state().inbox().items());
+        assertFalse(presenter.state().inbox().loading());
+        assertFalse(presenter.state().sessionBusy());
+    }
+
+    @Test void reauthorizationRefreshFailurePreservesCacheAndAllowsRetry() {
+        inbox(mail(1));
+        presenter.login(OAuthProvider.GOOGLE);
+        backend.session = new SessionSnapshot(SessionSnapshot.Phase.READY, account, backend.session.version());
+        backend.login.complete(account); flush();
+        backend.inboxes.getLast().fail(ErrorCode.IMAP_CONNECTION_FAILED); flush();
+        assertEquals(List.of(mail(1)), presenter.state().inbox().items());
+        assertTrue(presenter.state().inbox().stale());
+        presenter.refreshInbox();
+        assertTrue(presenter.state().inbox().loading());
+        backend.inboxes.getLast().complete(page(false, mail(2))); flush();
+        assertEquals(List.of(mail(2)), presenter.state().inbox().items());
     }
 
     @Test void failedReauthorizationKeepsDraftAndAllowsInboxToLoadAgain() {

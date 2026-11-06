@@ -76,7 +76,7 @@ public final class MailPresenter {
         if (disposed || sessionBusy || sendPhase == SendPhase.SENDING) return;
         SessionSnapshot before = backend.session();
         if (before.phase() != SessionSnapshot.Phase.LOGIN_REQUIRED && !before.hasSession()) return;
-        cancelAll(); inboxBusy = false; clearReader(); requested = Route.INBOX;
+        cancelAll(); inboxBusy = false; inboxError = null; clearReader(); requested = Route.INBOX;
         OperationHandle<Account> task = backend.login(provider);
         version = backend.session().version();
         sessionBusy = true; sessionError = null;
@@ -84,9 +84,12 @@ public final class MailPresenter {
         bind(Slot.SESSION, task, result -> {
             sessionBusy = false; sessionError = result.error();
             if (result.succeeded()) {
-                if (before.account() == null || !before.account().getId().equals(result.value().getId())) clearAccountData();
+                boolean sameAccount = before.account() != null && before.account().getId().equals(result.value().getId());
+                if (!sameAccount) clearAccountData();
                 requested = Route.INBOX;
-                beginInbox(InboxAction.CACHE);
+                // Reauthorization already has its visible cache: fetch with the new credentials now.
+                // Switching accounts still loads that account's cache before contacting the provider.
+                beginInbox(sameAccount ? InboxAction.REFRESH : InboxAction.CACHE);
             }
         });
     }
@@ -155,39 +158,72 @@ public final class MailPresenter {
         if (!available() || items.stream().noneMatch(mail -> mail.getId().equals(id))) return;
         cancel(Slot.READER);
         cancel(Slot.IMAGES);
-        selected = id; header = null; content = null; readerError = null; mode = BodyMode.TEXT;
-        requested = Route.READER; readerPhase = ReaderPhase.HEADER_LOADING;
+        if (selected != null && !selected.equals(id)) backend.readerClosed(selected);
+        selected = id;
+        header = null;
+        content = null;
+        readerError = null;
+        mode = BodyMode.TEXT;
+        requested = Route.READER;
+        readerPhase = ReaderPhase.HEADER_LOADING;
         publish();
         bind(Slot.READER, backend.header(id), result -> {
-            if (!result.succeeded()) { readerError = result.error(); readerPhase = ReaderPhase.ERROR; return; }
-            header = result.value(); readerPhase = ReaderPhase.CONTENT_LOADING;
+            if (!result.succeeded()) {
+                readerFailed(result.error());
+                return;
+            }
+            header = result.value();
+            readerPhase = ReaderPhase.CONTENT_LOADING;
             publish();
-            bind(Slot.READER, backend.content(id), body -> {
-                if (!body.succeeded()) { readerError = body.error(); readerPhase = ReaderPhase.ERROR; return; }
-                content = body.value(); readerPhase = ReaderPhase.READY;
-                mode = content.getDocument() == null ? BodyMode.TEXT : BodyMode.HTML;
-                header = header.withRead(true);
-                items = items.stream().map(mail -> mail.getId().equals(id) ? mail.withRead(true) : mail).toList();
-                publish(); // The readable body reaches JavaFX before any proxy request.
-                long imageVersion = version;
-                long readerRevision = revisions.get(Slot.READER);
-                backend.images(content.getContent(), partial -> dispatcher.execute(() -> {
-                    synchronized (MailPresenter.this) {
-                        if (disposed || backend.session().version() != imageVersion
-                                || !Objects.equals(selected, id) || revisions.get(Slot.READER) != readerRevision
-                                || !running.containsKey(Slot.IMAGES)) return;
-                        content = partial;
-                        publish();
-                    }
-                })).ifPresent(task -> bind(Slot.IMAGES, task, images -> {
-                    // Failure leaves the readable body intact; bind rejects stale sessions/selections.
-                    if (images.succeeded()) content = images.value();
-                }));
-            });
+            bind(Slot.READER, backend.content(id), body -> acceptBody(id, body));
         });
     }
 
+    private void readerFailed(OperationError error) {
+        readerError = error;
+        readerPhase = ReaderPhase.ERROR;
+    }
+
+    private void acceptBody(UUID id, OperationResult<MailPresentation> result) {
+        if (!result.succeeded()) {
+            readerFailed(result.error());
+            return;
+        }
+        content = result.value();
+        readerPhase = ReaderPhase.READY;
+        mode = content.getDocument() == null ? BodyMode.TEXT : BodyMode.HTML;
+        header = header.withRead(true);
+        items = items.stream().map(mail -> mail.getId().equals(id) ? mail.withRead(true) : mail).toList();
+        publish(); // The readable body reaches JavaFX before any proxy request.
+        loadReaderImages(id);
+    }
+
+    private void loadReaderImages(UUID id) {
+        long imageVersion = version;
+        long readerRevision = revisions.get(Slot.READER);
+        backend.images(content.getContent(), partial -> dispatcher.execute(() -> {
+            synchronized (MailPresenter.this) {
+                if (disposed || backend.session().version() != imageVersion
+                        || !Objects.equals(selected, id) || revisions.get(Slot.READER) != readerRevision
+                        || !running.containsKey(Slot.IMAGES)) return;
+                content = partial;
+                publish();
+            }
+        })).ifPresent(task -> bind(Slot.IMAGES, task, images -> {
+            // Failure leaves the readable body intact; bind rejects stale sessions/selections.
+            if (images.succeeded()) content = images.value();
+        }));
+    }
+
     public synchronized void retryReader() { if (selected != null) openMail(selected); }
+
+    public synchronized void previousMail() { openAdjacent(-1); }
+
+    public synchronized void nextMail() { openAdjacent(1); }
+
+    private void openAdjacent(int offset) {
+        if (available()) snapshot().adjacentMail(offset).ifPresent(this::openMail);
+    }
 
     public synchronized void backToInbox() {
         if (!available()) return;

@@ -104,6 +104,8 @@ public final class MailWindow {
         list.setOnKeyPressed(e -> { if (e.getCode() == KeyCode.ENTER) { openSelected(); e.consume(); } });
         list.setAccessibleText("Bandeja de entrada. Abre un correo con doble clic o Enter.");
         reader.button("backButton").setOnAction(e -> presenter.backToInbox());
+        reader.button("previousButton").setOnAction(e -> presenter.previousMail());
+        reader.button("nextButton").setOnAction(e -> presenter.nextMail());
         reader.button("textButton").setOnAction(e -> presenter.showText());
         reader.button("formattedButton").setOnAction(e -> presenter.showFormatted());
         for (View view : List.of(main,reader)) {
@@ -111,7 +113,7 @@ public final class MailWindow {
             view.button("inboxButton").setOnAction(e -> presenter.backToInbox());
             for (String id : List.of("notesButton","calendarButton","sentButton","draftsButton")) future(view.node(id));
         }
-        for (String id : List.of("previousButton","nextButton","replyButton","forwardButton","deleteButton","archiveButton")) future(reader.node(id));
+        for (String id : List.of("replyButton","forwardButton","deleteButton","archiveButton")) future(reader.node(id));
         future(main.node("searchField"));
     }
     private void openSelected() {
@@ -154,8 +156,10 @@ public final class MailWindow {
                     : next.session().phase() == SessionSnapshot.Phase.OFFLINE ? "Sesión local disponible. Actualiza la bandeja para intentar conectar."
                     : route == Route.RECOVERY ? "No se pudo iniciar Evermail. Revisa el almacenamiento local y vuelve a intentar."
                     : "";
-            if (route == Route.INBOX && next.inbox().error() != null) message = next.inbox().error().message() + " Se conserva la copia local.";
-            if (route == Route.READER && next.reader().error() != null) message = next.reader().error().message();
+            if (next.sessionError() == null) {
+                if (route == Route.INBOX && next.inbox().error() != null) message = next.inbox().error().message() + " Se conserva la copia local.";
+                if (route == Route.READER && next.reader().error() != null) message = next.reader().error().message();
+            }
             status.setText(message);
             String key = next.session().version() + ":" + next.session().phase() + ":" + message
                     + ":" + retry.isVisible() + authorize.isVisible() + cancelLogin.isVisible();
@@ -220,6 +224,18 @@ public final class MailWindow {
         ComposeController.of(main.node("compose")).reset();
     }
     private void renderReader(Reader data) {
+        reader.button("previousButton").setDisable(!state.canReadPrevious());
+        reader.button("nextButton").setDisable(!state.canReadNext());
+        MailHeader selectedRow = list.getSelectionModel().getSelectedItem();
+        if (data.mailId() != null && (selectedRow == null || !data.mailId().equals(selectedRow.getId()))) {
+            for (int index = 0; index < list.getItems().size(); index++) {
+                if (list.getItems().get(index).getId().equals(data.mailId())) {
+                    list.getSelectionModel().select(index);
+                    list.scrollTo(index);
+                    break;
+                }
+            }
+        }
         MailHeader header = data.header();
         reader.label("readerSubject").setText(header == null ? "Cargando correo…" : "Asunto: " + header.getSubject());
         reader.label("senderName").setText(header == null ? "" : Objects.toString(header.getSenderName(),header.getSenderEmail()));

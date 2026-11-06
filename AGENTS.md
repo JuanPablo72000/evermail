@@ -11,6 +11,17 @@
 - docs contiene únicamente documentación dirigida al usuario: guías, requisitos, diagramas y resultados de pruebas.
 - Conservar los cambios previos del usuario. No editar .env, tampoco durante pruebas.
 
+# Alcance vigente de la versión 1.0 — 4 de noviembre de 2026
+
+- El usuario autoriza implementar el límite total de 2 GB y Anterior/Siguiente, y revisar legibilidad de las clases fundamentales. Las demás funciones pendientes se aplazan a futuras versiones. No generar `.exe` ni instalador en esta tarea.
+- El límite se interpreta como 2.000.000.000 bytes en total. La respuesta prioritaria es limpiar automáticamente contenido prescindible de la caché local, no pedir al usuario que lo borre. Nunca eliminar correos del proveedor, enviados, registros de envío pendientes o archivos ajenos como limpieza de caché.
+- `StorageBudget` cuenta instalación/runtime, dependencias, cachés nativas identificables y directorio de datos. Reserva margen operativo y espacio para journal/compactación. `SqliteStorage` usa `max_page_count`, journal DELETE, temporales SQL en memoria y `auto_vacuum=FULL`; una base anterior se convierte con VACUUM solo cuando cabe con su espacio de trabajo.
+- `TransactionManager` reserva espacio antes de descargar y antes de guardar; las reservas se liberan al fallar/cancelar. La limpieza retira cuerpos e imágenes incrustadas cifradas, conservando encabezados y cursores. Prefiere retirar los adicionales a los 50 recientes por menor uso; si hace falta, retira también los más antiguos dentro de esos 50. Protege el correo seleccionado y cuerpos con reserva activa. Los 50 son una preferencia, no un mínimo garantizado bajo presión de espacio.
+- Los enviados y sus estados se conservan. Si no queda contenido prescindible o no hay espacio para limpiar de forma segura, se informa `STORAGE_LIMIT_REACHED`. El límite no puede impedir escrituras de otros programas ni reducir el tamaño de una instalación ajena al proceso; no borrar archivos desconocidos para recuperar espacio.
+- Anterior/Siguiente recorre el orden de la bandeja ya cargada, incluidas páginas adicionales, sin paginar automáticamente ni dar la vuelta en los extremos. Reutiliza cancelación y validación de sesión del lector; no activa responder, reenviar, enviados u otras funciones futuras.
+- Se mantiene la política del 15 de octubre: cerrar la ventana limpia la bandeja local y conserva cuenta, claves y enviados; cerrar sesión elimina los datos de esa cuenta. No se añaden variables de entorno ni se modifica `.env`.
+- Esta sección prevalece sobre las propuestas y notas históricas que describen el presupuesto de almacenamiento y Anterior/Siguiente como pendientes.
+
 # Propuesta para futuras actualizaciones: caché en la nube
 
 - Idea del usuario registrada el 12 de octubre de 2026; pendiente de diseño e implementación. Esta nota no autoriza implementarla ahora.

@@ -5,9 +5,24 @@ import com.juanpablo.evermail.model.*;
 import com.juanpablo.evermail.navigation.NavigationRules.Route;
 import java.util.*;
 
-/** Immutable snapshots for a future view; no JavaFX properties or controls. */
+/** Immutable snapshots shared with the view; no JavaFX properties or controls. */
 public record MailViewState(Route route, SessionSnapshot session, boolean sessionBusy, OperationError sessionError,
                             Inbox inbox, Reader reader, Compose compose, boolean logoutConfirmation) {
+    public boolean canReadPrevious() { return adjacentMail(-1).isPresent(); }
+    public boolean canReadNext() { return adjacentMail(1).isPresent(); }
+
+    /** Follow the displayed inbox order, including pages explicitly loaded by the user. */
+    public Optional<UUID> adjacentMail(int offset) {
+        if (route != Route.READER || sessionBusy || !session.hasSession()) return Optional.empty();
+        for (int index = 0; index < inbox.items().size(); index++) {
+            if (inbox.items().get(index).getId().equals(reader.mailId())) {
+                int target = index + offset;
+                return target >= 0 && target < inbox.items().size()
+                        ? Optional.of(inbox.items().get(target).getId()) : Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
     public record Inbox(List<MailHeader> items, boolean loading, boolean hasMore, boolean stale, OperationError error) {
         public Inbox { items = List.copyOf(items); }
         public boolean empty() { return !loading && error == null && items.isEmpty(); }

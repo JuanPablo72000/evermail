@@ -40,7 +40,7 @@ public final class CoordinatedPresentationBackend implements PresentationBackend
         task.result().thenAccept(result -> { if (!result.succeeded()) coordinator.readerReady(mailId); });
         return task;
     }
-    public void readerClosed(UUID mailId) { coordinator.readerReady(mailId); }
+    public void readerClosed(UUID mailId) { coordinator.readerClosed(mailId); }
     public OperationHandle<MailPresentation> content(UUID mailId) {
         OperationHandle<MailPresentation> task = coordinator.submit(AppConstants.CONTENT_BUDGET, (b, a, d) -> {
             MailContent content = b.inbox().loadContent(a.getId(), mailId, d);

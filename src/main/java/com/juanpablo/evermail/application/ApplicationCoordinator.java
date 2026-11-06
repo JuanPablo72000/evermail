@@ -45,10 +45,19 @@ public final class ApplicationCoordinator {
 
     public SessionSnapshot session() { return session; }
 
-    public synchronized void prioritize(UUID mailId) { reading = mailId; prefetch.remove(mailId); }
+    public synchronized void prioritize(UUID mailId) {
+        reading = mailId;
+        prefetch.remove(mailId);
+        if (backend != null) backend.inbox().selectReader(mailId);
+    }
     public synchronized void readerReady(UUID mailId) {
         if (Objects.equals(reading, mailId)) reading = null;
         drainPrefetch();
+    }
+
+    public synchronized void readerClosed(UUID mailId) {
+        if (backend != null) backend.inbox().closeReader(mailId);
+        readerReady(mailId);
     }
 
     /** Keep only identifiers waiting for I/O; foreground operations always drain first. */
