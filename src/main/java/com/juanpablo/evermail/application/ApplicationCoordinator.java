@@ -21,6 +21,8 @@ public final class ApplicationCoordinator {
     private final ExecutorService worker;
     private final ExecutorService presentationWorker = Executors.newSingleThreadExecutor(
             Thread.ofPlatform().daemon().name("evermail-presentation").factory());
+    private final ExecutorService avatarWorker = Executors.newSingleThreadExecutor(
+            Thread.ofPlatform().daemon().name("evermail-avatars").factory());
     private final LinkedHashSet<UUID> prefetch = new LinkedHashSet<>();
     private UUID reading;
     private final int capacity;
@@ -99,6 +101,26 @@ public final class ApplicationCoordinator {
         return job;
     }
 
+    /** Optional network work has a separate serial owner and shares cancellation/session validation. */
+    public synchronized OperationHandle<AvatarPhoto> avatar(String email) {
+        if (!session.hasSession()) return unavailable();
+        if (pending.size() >= capacity) return busy();
+        Account account = session.account();
+        boolean online = session.phase() == READY;
+        Job<AvatarPhoto> job = new Job<>(session.version(), cancel ->
+                backend.avatar(account, email, online, Deadline.after(Duration.ofSeconds(25))), result -> {}, true);
+        job.presentation = true; // Independent work must not stall body prefetch.
+        pending.add(job);
+        avatarWorker.execute(job);
+        return job;
+    }
+
+    private void drainAvatars() throws Exception {
+        // The account worker waits without holding the coordinator monitor. Cancelled jobs finish first.
+        avatarWorker.submit(() -> {}).get();
+        backend.resetAvatars();
+    }
+
     public synchronized OperationHandle<StartupResult> start() {
         if (session.phase() != NEW && session.phase() != FAILED) return unavailable();
         transition(STARTING, null);
@@ -129,7 +151,11 @@ public final class ApplicationCoordinator {
         if (session.phase() != LOGIN_REQUIRED && !session.hasSession()) return unavailable();
         SessionSnapshot previous = session;
         transition(AUTHENTICATING, previous.account());
-        return enqueue(cancel -> Objects.requireNonNull(backend.login(provider, cancel)), result -> {
+        return enqueue(cancel -> {
+            drainAvatars();
+            cancel.check();
+            return Objects.requireNonNull(backend.login(provider, cancel));
+        }, result -> {
             if (result.succeeded()) setPhase(READY, result.value());
             else setPhase(previous.phase(), previous.account());
         }, true);
@@ -140,6 +166,7 @@ public final class ApplicationCoordinator {
         Account account = session.account();
         transition(LOGGING_OUT, null);
         return enqueue(cancel -> {
+            drainAvatars();
             backend.logout(account.getId(), Deadline.after(AppConstants.STARTUP_BUDGET));
             return null;
         }, result -> setPhase(result.succeeded() ? LOGIN_REQUIRED : FAILED, null), false);
@@ -164,10 +191,13 @@ public final class ApplicationCoordinator {
         if (session.phase() == CLOSED) return closed.minimalCompletionStage();
         transition(CLOSED, null);
         presentationWorker.shutdown();
+        avatarWorker.shutdown();
         worker.execute(() -> {
             OperationResult<Void> result;
             try {
                 while (!presentationWorker.awaitTermination(1, TimeUnit.SECONDS)) { /* await cancelled I/O */ }
+                while (!avatarWorker.awaitTermination(1, TimeUnit.SECONDS)) { /* wait before SQLite/keys close */ }
+                if (backend != null) backend.resetAvatars();
                 if (backend != null) backend.close();
                 result = OperationResult.success(null);
             } catch (Exception error) {

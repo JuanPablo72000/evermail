@@ -18,6 +18,7 @@ public class BackendContext implements AutoCloseable {
     private final MailRepository mails;
     private final OutboxRepository outbox;
     private final AuthService auth;
+    private final AvatarService avatars;
     private final InboxService inbox;
     private final MailSendService sender;
     private final StartupService startup;
@@ -45,6 +46,7 @@ public class BackendContext implements AutoCloseable {
         mails = new MailRepository(transactions, accounts, security, keys);
         outbox = new OutboxRepository(transactions, accounts, keys, security);
         auth = new AuthService(accounts, keys, oauth, config, coordinator, Clock.systemUTC());
+        avatars = new AvatarService(auth, new AvatarRepository(transactions, accounts, security, keys));
         try {
             sessions = java.util.Objects.requireNonNull(gatewayFactory.apply(auth, accounts));
         } catch (RuntimeException failure) {

@@ -88,6 +88,45 @@ class MailWindowTest {
         });
     }
 
+    @Test void senderPhotoAppearsInRowAndReaderAndClearsWhenCellIsReusedOrWindowCloses() throws Exception {
+        backend.enableAvatars = true;
+        ready();
+        fx(() -> {
+            ListView<?> list = (ListView<?>) node("mailList");
+            list.getSelectionModel().select(0);
+            list.fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,"","",KeyCode.ENTER,false,false,false,false));
+            backend.header.complete(mail);
+            return null;
+        });
+        fx(() -> null);
+        var output = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(96, 96, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", output);
+        AvatarPhoto photo = new AvatarPhoto(output.toByteArray(), AvatarPhoto.Status.AVAILABLE);
+        fx(() -> { assertNotNull(backend.avatar); backend.avatar.complete(photo); return null; });
+        fx(() -> {
+            Label avatar = (Label) node("senderAvatar");
+            assertInstanceOf(javafx.scene.image.ImageView.class, avatar.getGraphic());
+            assertInstanceOf(javafx.scene.shape.Circle.class, avatar.getGraphic().getClip());
+            assertEquals("", avatar.getText());
+            var cell = new MailCell(email -> photo, email -> {});
+            cell.updateItem(mail, false);
+            Label rowAvatar = (Label) cell.getGraphic().lookup("#avatar");
+            assertInstanceOf(javafx.scene.image.ImageView.class, rowAvatar.getGraphic());
+            AvatarImage.show(rowAvatar, "Sender", AvatarPhoto.empty(AvatarPhoto.Status.ABSENT));
+            assertEquals("S", rowAvatar.getText());
+            assertNull(rowAvatar.getGraphic());
+            assertTrue(rowAvatar.getTooltip().getText().contains("Google no ofrece"));
+            AvatarImage.show(rowAvatar, "Sender", AvatarPhoto.empty(AvatarPhoto.Status.UNAVAILABLE));
+            assertTrue(rowAvatar.getTooltip().getText().contains("No se pudo consultar"));
+            cell.updateItem(null, true);
+            assertNull(rowAvatar.getGraphic());
+            assertNull(rowAvatar.getTooltip());
+            window.close();
+            assertNull(avatar.getGraphic());
+            return null;
+        });
+    }
+
     @Test void reauthorizeFromReaderReturnsToInboxAndLoadsFreshMessages() throws Exception {
         ready();
         fx(() -> {
@@ -159,6 +198,10 @@ class MailWindowTest {
             field("toField").setText("recipient@example.com");
             field("ccField").setText("copy@example.com");
             field("bccField").setText("hidden@example.com");
+            button("ccButton").fire();
+            assertFalse(field("ccField").isManaged());
+            assertEquals("copy@example.com", field("ccField").getText());
+            assertEquals("CC •", button("ccButton").getText());
             field("messageField").setText("Draft");
             button("sendButton").fire();
             backend.send.complete(new SendResult(backend.submission,DeliveryState.RECORDED,UUID.randomUUID(),null));
@@ -169,6 +212,9 @@ class MailWindowTest {
             assertFalse(field("bccField").isManaged());
             assertTrue(button("ccButton").isVisible());
             assertTrue(button("bccButton").isVisible());
+            assertEquals("", field("ccField").getText());
+            assertEquals("", field("bccField").getText());
+            assertEquals("CC", button("ccButton").getText());
             return null;
         });
     }
@@ -295,6 +341,12 @@ class MailWindowTest {
         void complete(T value) { result.complete(OperationResult.success(value)); }
     }
     private static final class FakeBackend implements PresentationBackend {
+        boolean enableAvatars;
+        Pending<AvatarPhoto> avatar;
+        public Optional<OperationHandle<AvatarPhoto>> avatar(String email) {
+            if (!enableAvatars) return Optional.empty();
+            avatar = new Pending<>(session.version()); return Optional.of(avatar);
+        }
         SessionSnapshot session = new SessionSnapshot(SessionSnapshot.Phase.NEW,null,0);
         Pending<StartupResult> startup; Pending<Account> login; Pending<Void> logout;
         Pending<InboxPage> inbox; Pending<MailHeader> header; Pending<MailPresentation> content; Pending<SendResult> send;

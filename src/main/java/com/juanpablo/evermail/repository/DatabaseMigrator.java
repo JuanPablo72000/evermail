@@ -6,7 +6,7 @@ import java.util.List;
 
 public class DatabaseMigrator {
     private final TransactionManager transactions;
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
 
     public DatabaseMigrator(TransactionManager transactions) {
         this.transactions = transactions;
@@ -33,8 +33,6 @@ public class DatabaseMigrator {
                     }
                     if (version == 1) {
                         statement.execute("ALTER TABLE mail ADD COLUMN body_format INTEGER NOT NULL DEFAULT 0 CHECK (body_format IN (0, 1))");
-                        statement.execute("PRAGMA user_version=" + VERSION);
-                        return null;
                     }
                     boolean legacy = false;
                     try (var result = statement.executeQuery("PRAGMA table_info(account)")) {

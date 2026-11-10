@@ -41,6 +41,9 @@ public final class CoordinatedPresentationBackend implements PresentationBackend
         return task;
     }
     public void readerClosed(UUID mailId) { coordinator.readerClosed(mailId); }
+    public Optional<OperationHandle<AvatarPhoto>> avatar(String email) {
+        return Optional.of(coordinator.avatar(email));
+    }
     public OperationHandle<MailPresentation> content(UUID mailId) {
         OperationHandle<MailPresentation> task = coordinator.submit(AppConstants.CONTENT_BUDGET, (b, a, d) -> {
             MailContent content = b.inbox().loadContent(a.getId(), mailId, d);

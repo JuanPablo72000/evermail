@@ -12,6 +12,10 @@ public interface BackendAccess extends AutoCloseable {
     void logout(UUID accountId, Deadline deadline) throws Exception;
     InboxService inbox();
     MailSendService sender();
+    default AvatarPhoto avatar(Account account, String email, boolean online, Deadline deadline) throws Exception {
+        return AvatarPhoto.empty(AvatarPhoto.Status.ABSENT);
+    }
+    default void resetAvatars() { }
 
     static BackendAccess open() throws Exception {
         return from(BackendContext.create());
@@ -37,6 +41,10 @@ public interface BackendAccess extends AutoCloseable {
             }
             public InboxService inbox() { return context.getInbox(); }
             public MailSendService sender() { return context.getSender(); }
+            public AvatarPhoto avatar(Account account, String email, boolean online, Deadline deadline) throws Exception {
+                return context.getAvatars().load(account, email, online, deadline);
+            }
+            public void resetAvatars() { context.getAvatars().reset(); }
             public void close() throws Exception {
                 try {
                     if (initialized) context.getMails().clearInboxCache();

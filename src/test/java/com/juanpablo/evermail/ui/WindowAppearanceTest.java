@@ -37,6 +37,10 @@ class WindowAppearanceTest {
                     assertEquals(0x00301a25, color.getValue());
                     assertEquals(0, dwm.DwmGetWindowAttribute(hwnd, 36, color, Integer.BYTES));
                     assertEquals(0x00ffffff, color.getValue());
+                    assertEquals(0, dwm.DwmGetWindowAttribute(hwnd, 34, color, Integer.BYTES));
+                    assertEquals(0x00e93420, color.getValue());
+                    assertEquals(0, dwm.DwmGetWindowAttribute(hwnd, 33, color, Integer.BYTES));
+                    assertEquals(2, color.getValue());
                 }
             } finally { stage.close(); }
             return null;

@@ -24,7 +24,8 @@ module com.juanpablo.evermail {
     requires static lombok;
 
     opens com.juanpablo.evermail to javafx.fxml;
-    opens com.juanpablo.evermail.ui to javafx.fxml;
+    // JNA invokes the native window-enumeration callback reflectively on the module path.
+    opens com.juanpablo.evermail.ui to javafx.fxml, com.sun.jna;
     exports com.juanpablo.evermail.ui;
     opens com.juanpablo.evermail.model;
     opens com.juanpablo.evermail.repository to com.google.gson;

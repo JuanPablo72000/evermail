@@ -47,6 +47,10 @@ class MailHtmlLayoutTest {
                     .column{display:block!important;width:100%%!important}
                 }
                 </style>
+                <div id="preheader" style="max-height:0;max-width:0;opacity:0;overflow:hidden">
+                Mira quién se ha puesto en contacto contigo. Tienes nuevas actualizaciones.
+                </div>
+                <div hidden>Hidden preview padding</div>
                 <table class="card" align="center" cellpadding="0" cellspacing="0">
                 <tr><td colspan="2" class="header"><h1>Novedades de octubre</h1><p>Un correo que conserva su diseño.</p></td></tr>
                 <tr><td id="first" class="column"><p class="label">DISEÑO</p><h2 class="title">Tablas y estilos</h2>
@@ -56,7 +60,8 @@ class MailHtmlLayoutTest {
                 <div style="background-image:url('%s/background')"></div>
                 <script>fetch('%s/script')</script>
                 """.formatted(origin, origin, origin, origin);
-        String safe = HtmlMail.sanitize(raw, cid -> null, Deadline.after(Duration.ofSeconds(5))).html();
+        String cached = HtmlMail.sanitize(raw, cid -> null, null, true, Deadline.after(Duration.ofSeconds(5))).html();
+        String safe = HtmlMail.sanitize(cached, cid -> null, Deadline.after(Duration.ofSeconds(5))).html();
         WebView web = fx(() -> new WebView());
         javafx.stage.Stage stage = fx(javafx.stage.Stage::new);
         try {
@@ -84,6 +89,12 @@ class MailHtmlLayoutTest {
                     assertEquals(width < 600 ? "block" : "table-cell", display);
                     double overflow = ((Number)engine.executeScript("document.documentElement.scrollWidth-window.innerWidth")).doubleValue();
                     assertTrue(overflow <= 1, "Horizontal overflow: " + overflow);
+                    assertEquals("hidden", engine.executeScript("getComputedStyle(document.getElementById('preheader')).overflow"));
+                    assertEquals("0", engine.executeScript("getComputedStyle(document.getElementById('preheader')).opacity"));
+                    double preheaderHeight = ((Number)engine.executeScript("document.getElementById('preheader').getBoundingClientRect().height")).doubleValue();
+                    assertEquals(0, preheaderHeight, 0.1);
+                    double extraHeight = ((Number)engine.executeScript("document.documentElement.scrollHeight-Math.max(window.innerHeight,document.querySelector('.card').getBoundingClientRect().bottom)")).doubleValue();
+                    assertTrue(extraHeight <= 1, "Preheader must not create a blank scroll area: " + extraHeight);
                     assertEquals(0, engine.getDocument().getElementsByTagName("script").getLength());
                     FxmlViewsTest.save(web.snapshot(null, null), "mail-html-" + width + ".png");
                     return null;

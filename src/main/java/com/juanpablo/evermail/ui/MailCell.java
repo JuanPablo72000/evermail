@@ -1,6 +1,9 @@
 package com.juanpablo.evermail.ui;
 
 import com.juanpablo.evermail.model.MailHeader;
+import com.juanpablo.evermail.model.AvatarPhoto;
+import java.util.function.Function;
+import java.util.function.Consumer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.ZoneId;
@@ -13,7 +16,11 @@ import javafx.scene.layout.Region;
 final class MailCell extends ListCell<MailHeader> {
     private final Region row;
     private final Label avatar, sender, subject, preview, date;
-    MailCell() {
+    private final Function<String, AvatarPhoto> photos;
+    private final Consumer<String> requestPhoto;
+    MailCell() { this(email -> null, email -> {}); }
+    MailCell(Function<String, AvatarPhoto> photos, Consumer<String> requestPhoto) {
+        this.photos = photos; this.requestPhoto = requestPhoto;
         try {
             row = FXMLLoader.load(getClass().getResource("/com/juanpablo/evermail/fxml/Mail-Row.fxml"));
         } catch (IOException e) { throw new UncheckedIOException(e); }
@@ -30,11 +37,14 @@ final class MailCell extends ListCell<MailHeader> {
     @Override protected void updateItem(MailHeader mail, boolean empty) {
         super.updateItem(mail, empty); setText(null);
         if (empty || mail == null) {
+            AvatarImage.show(avatar, null, null);
             for (Label label : new Label[]{avatar,sender,subject,preview,date}) label.setText("");
             setGraphic(null); return;
         }
         String name = mail.getSenderName() == null || mail.getSenderName().isBlank() ? mail.getSenderEmail() : mail.getSenderName();
-        sender.setText(name); avatar.setText(MailWindow.initial(name));
+        sender.setText(name);
+        AvatarImage.show(avatar, name, photos.apply(AvatarPhoto.address(mail.getSenderEmail())));
+        requestPhoto.accept(mail.getSenderEmail());
         subject.setText(mail.getSubject().isBlank() ? "(Sin asunto)" : mail.getSubject());
         preview.setText(mail.isRead() ? "Leído" : "Sin leer");
         date.setText(mail.getOccurredAt() == null ? "" : DateTimeFormatter.ofPattern("dd/MM HH:mm")

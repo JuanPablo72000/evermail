@@ -22,6 +22,22 @@
 - Se mantiene la política del 15 de octubre: cerrar la ventana limpia la bandeja local y conserva cuenta, claves y enviados; cerrar sesión elimina los datos de esa cuenta. No se añaden variables de entorno ni se modifica `.env`.
 - Esta sección prevalece sobre las propuestas y notas históricas que describen el presupuesto de almacenamiento y Anterior/Siguiente como pendientes.
 
+# Actualización del 6 de noviembre de 2026: fotos de remitentes Google
+
+- El usuario confirmó habilitar People API y los permisos `contacts.readonly` y `contacts.other.readonly`, y autorizó implementar las fotos de remitentes. Esta autorización amplía el alcance del 4 de noviembre únicamente para esta función; la foto de cuenta propia y Microsoft siguen pendientes.
+- `GooglePeopleClient` consulta listados paginados de contactos y otros contactos (direcciones y fotos), verifica coincidencia exacta de dirección y omite fotos predeterminadas. Limita cada fuente a 10 páginas/10.000 direcciones; no es un directorio público ni garantiza cobertura equivalente a Gmail.
+- `AvatarService` usa un trabajador separado, caché acotada por cuenta, miniaturas PNG de 96×96 y caché cifrada binaria en `avatar_cache` (esquema 3). El presupuesto total de 2 GB incluye esta caché; se retiran fotos antes que cuerpos, y una foto nueva no desplaza cuerpos. Cerrar la ventana limpia también las fotos de sesión; cerrar sesión borra sus filas junto con la cuenta.
+- La presentación solicita fotos de los remitentes visibles, deduplica y conserva iniciales ante ausencia/error. La falta de permisos de contactos permite seguir leyendo y ofrece volver a autorizar. Los permisos de contactos no son obligatorios para validar el acceso al correo.
+- Las transiciones de sesión cancelan y esperan al trabajador de fotos antes de modificar cuenta/claves. Los resultados y gráficos antiguos se descartan por versión de sesión. El token va únicamente a People API; las fotos se descargan sin token desde HTTPS de `googleusercontent.com`, sin redirecciones, WebView ni proxy de mensajes.
+- No se añaden variables de entorno ni se modifica `.env`. Guía de uso y límites: `docs/desarrollo/fotos-remitentes.md`.
+
+# Propuesta para futuras actualizaciones: notas y presupuesto de almacenamiento
+
+- El usuario propone una miniapp de notas funcional dentro de Evermail, con soporte de Markdown o formato similar. Queda pendiente de diseño e implementación; los adjuntos de correo también se revisarán después. Esta propuesta no autoriza implementar estas funciones ahora.
+- Las notas guardadas por el usuario deben almacenarse aparte del presupuesto de 2 GB y no contabilizarse dentro de él. Esta excepción futura prevalece sobre las menciones generales a incluir todos los datos locales en ese límite.
+- La caché regenerable y los temporales de la función de notas sí pueden formar parte del presupuesto de 2 GB. Nunca tratar la única copia guardada de una nota como caché ni eliminarla para recuperar espacio.
+- Quedan por definir el formato y la ubicación de almacenamiento, la relación de las notas con las cuentas y su tratamiento al cerrar sesión o desinstalar. No se modifica ahora el presupuesto implementado para la aplicación y los datos de correo.
+
 # Propuesta para futuras actualizaciones: caché en la nube
 
 - Idea del usuario registrada el 12 de octubre de 2026; pendiente de diseño e implementación. Esta nota no autoriza implementarla ahora.

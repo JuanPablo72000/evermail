@@ -14,6 +14,7 @@ public interface PresentationBackend {
     OperationHandle<Void> logout();
     OperationHandle<InboxPage> inbox(InboxAction action, InboxCursor cursor);
     OperationHandle<MailHeader> header(UUID mailId);
+    default java.util.Optional<OperationHandle<AvatarPhoto>> avatar(String email) { return java.util.Optional.empty(); }
     default void readerClosed(UUID mailId) { }
     OperationHandle<MailPresentation> content(UUID mailId);
     /** Optional second stage; implementations without remote images need no extra operation. */

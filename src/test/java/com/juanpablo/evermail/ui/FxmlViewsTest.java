@@ -182,6 +182,18 @@ class FxmlViewsTest {
                 assertTrue(root.lookup("#ccButton").isVisible());
                 assertTrue(root.lookup("#bccButton").isVisible());
                 save(root.snapshot(null, null), "compose-expanded.png");
+                TextField firstField = (TextField)root.lookup("#" + first + "Field");
+                Button firstButton = (Button)root.lookup("#" + first + "Button");
+                firstField.setText("copy@example.com");
+                firstButton.fire();
+                assertFalse(firstField.isVisible());
+                assertFalse(firstField.isManaged());
+                assertTrue(firstButton.getText().endsWith("•"));
+                assertTrue(root.lookup("#" + second + "Field").isVisible());
+                firstButton.fire();
+                assertTrue(firstField.isVisible());
+                assertEquals("copy@example.com", firstField.getText());
+                assertFalse(firstButton.getText().contains("•"));
                 ComposeController.of(root).reset();
                 assertFalse(root.lookup("#ccField").isVisible());
                 assertFalse(root.lookup("#bccField").isVisible());

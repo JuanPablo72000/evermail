@@ -32,9 +32,11 @@ public final class FigmaImage extends Region {
         requestLayout();
     }
     @Override protected void layoutChildren() {
-        image.setFitWidth(fitHeightOnly ? 0 : getWidth());
-        image.setFitHeight(getHeight());
-        image.relocate((getWidth() - image.getBoundsInLocal().getWidth()) / 2,
-                (getHeight() - image.getBoundsInLocal().getHeight()) / 2);
+        double width = Math.max(0, getWidth() - snappedLeftInset() - snappedRightInset());
+        double height = Math.max(0, getHeight() - snappedTopInset() - snappedBottomInset());
+        image.setFitWidth(fitHeightOnly ? 0 : width);
+        image.setFitHeight(height);
+        image.relocate(snappedLeftInset() + (width - image.getBoundsInLocal().getWidth()) / 2,
+                snappedTopInset() + (height - image.getBoundsInLocal().getHeight()) / 2);
     }
 }

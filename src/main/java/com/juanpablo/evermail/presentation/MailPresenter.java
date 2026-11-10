@@ -13,7 +13,7 @@ import static com.juanpablo.evermail.presentation.PresentationBackend.InboxActio
 
 /** Headless presentation. Invoke actions on the same serial dispatcher used for notifications. */
 public final class MailPresenter {
-    private enum Slot { SESSION, INBOX, READER, IMAGES, SEND }
+    private enum Slot { SESSION, INBOX, READER, IMAGES, AVATAR, SEND }
     private final PresentationBackend backend;
     private final Executor dispatcher;
     private final Consumer<MailViewState> listener;
@@ -33,6 +33,10 @@ public final class MailPresenter {
     private ComposeDraft draft = ComposeDraft.empty();
     private UUID submissionId = UUID.randomUUID();
     private SendPhase sendPhase = SendPhase.EDITING;
+    private final LinkedHashMap<String, AvatarPhoto> avatars = new LinkedHashMap<>();
+    private final LinkedHashSet<String> avatarQueue = new LinkedHashSet<>();
+    private boolean avatarPermissionRequired;
+    private String loadingAvatar;
 
     public MailPresenter(PresentationBackend backend, Executor dispatcher, Consumer<MailViewState> listener) {
         this.backend = Objects.requireNonNull(backend);
@@ -51,7 +55,8 @@ public final class MailPresenter {
                 backend.session(), sessionBusy, sessionError,
                 new Inbox(items, inboxBusy, hasMore, stale, inboxError),
                 new Reader(selected, header, content, readerPhase, mode, readerError, running.containsKey(Slot.IMAGES)),
-                new Compose(draft, sendPhase, sendError, discardConfirmation), logoutConfirmation);
+                new Compose(draft, sendPhase, sendError, discardConfirmation), logoutConfirmation,
+                avatars, avatarPermissionRequired);
     }
 
     private void publish() { listener.accept(snapshot()); }
@@ -77,6 +82,7 @@ public final class MailPresenter {
         SessionSnapshot before = backend.session();
         if (before.phase() != SessionSnapshot.Phase.LOGIN_REQUIRED && !before.hasSession()) return;
         cancelAll(); inboxBusy = false; inboxError = null; clearReader(); requested = Route.INBOX;
+        clearAvatars();
         OperationHandle<Account> task = backend.login(provider);
         version = backend.session().version();
         sessionBusy = true; sessionError = null;
@@ -124,7 +130,40 @@ public final class MailPresenter {
     }
 
     public synchronized void refreshInbox() {
-        if (available() && !inboxBusy) beginInbox(InboxAction.REFRESH);
+        if (available() && !inboxBusy) {
+            cancel(Slot.AVATAR); clearAvatars();
+            beginInbox(InboxAction.REFRESH);
+        }
+    }
+
+    /** Requests come from visible rows/the reader; only one lookup runs and duplicates share its result. */
+    public synchronized void requestAvatar(String email) {
+        if (!available() || backend.session().account().getProvider() != OAuthProvider.GOOGLE) return;
+        String address = AvatarPhoto.address(email);
+        if (address.isEmpty() || avatars.containsKey(address) || address.equals(loadingAvatar)) return;
+        if (items.stream().noneMatch(mail -> AvatarPhoto.address(mail.getSenderEmail()).equals(address))) return;
+        if (avatarQueue.size() < 100) avatarQueue.add(address);
+        nextAvatar();
+    }
+
+    private void nextAvatar() {
+        if (running.containsKey(Slot.AVATAR) || avatarQueue.isEmpty() || disposed || sessionBusy) return;
+        String email = avatarQueue.removeFirst();
+        loadingAvatar = email;
+        var task = backend.avatar(email);
+        if (task.isEmpty()) { loadingAvatar = null; avatarQueue.clear(); return; }
+        bind(Slot.AVATAR, task.get(), result -> {
+            loadingAvatar = null;
+            AvatarPhoto photo = result.succeeded() ? result.value() : AvatarPhoto.empty(AvatarPhoto.Status.UNAVAILABLE);
+            avatars.put(email, photo);
+            while (avatars.size() > 128) avatars.pollFirstEntry();
+            avatarPermissionRequired |= photo.status() == AvatarPhoto.Status.PERMISSION_REQUIRED;
+            nextAvatar();
+        });
+    }
+
+    private void clearAvatars() {
+        avatars.clear(); avatarQueue.clear(); loadingAvatar = null; avatarPermissionRequired = false;
     }
 
     public synchronized void loadMore() {
@@ -318,6 +357,7 @@ public final class MailPresenter {
         sendPhase = SendPhase.EDITING; sendError = null; discardConfirmation = false;
     }
     private void clearAccountData() {
+        clearAvatars();
         items = List.of(); cursor = null; hasMore = false; stale = false; inboxError = null;
         inboxBusy = false; logoutConfirmation = false; requested = Route.INBOX;
         clearReader(); resetDraft();

@@ -42,6 +42,7 @@ public final class MailWindow {
     private long version = -1;
     private Route route;
     private List<MailHeader> displayed = List.of();
+    private Map<String, AvatarPhoto> displayedAvatars = Map.of();
     private String bannerKey = "", dismissedBannerKey;
     private boolean draftHadContent;
 
@@ -69,7 +70,7 @@ public final class MailWindow {
         body = new SafeMailBody(this::openLink, message -> { readerStatus.setText(message); visible(readerStatus,true); });
         ((StackPane)reader.node("bodyHost")).getChildren().setAll(body);
         @SuppressWarnings("unchecked") ListView<MailHeader> inbox = (ListView<MailHeader>) main.node("mailList");
-        list = inbox; list.setCellFactory(v -> new MailCell());
+        list = inbox; list.setCellFactory(v -> new MailCell(email -> displayedAvatars.get(email), this::requestAvatar));
         presenter = new MailPresenter(backend, Platform::runLater, this::render);
         wire();
         wipePrivateViews();
@@ -146,7 +147,9 @@ public final class MailWindow {
             login.button("googleButton").setDisable(next.sessionBusy());
             login.button("microsoftButton").setDisable(next.sessionBusy());
             boolean authenticating = next.session().phase() == SessionSnapshot.Phase.AUTHENTICATING;
-            visible(cancelLogin, authenticating); visible(authorize, privateView && next.session().phase() == SessionSnapshot.Phase.REAUTH_REQUIRED);
+            visible(cancelLogin, authenticating);
+            visible(authorize, privateView && !next.sessionBusy() && (next.session().phase() == SessionSnapshot.Phase.REAUTH_REQUIRED
+                    || next.avatarPermissionRequired()));
             boolean failure = route == Route.RECOVERY || route == Route.READER && next.reader().error() != null
                     || route == Route.INBOX && next.inbox().error() != null;
             visible(retry, failure && !next.sessionBusy() && !next.inbox().loading());
@@ -154,6 +157,7 @@ public final class MailWindow {
                     : authenticating ? "Autoriza el acceso en tu navegador. Puedes cancelar aquí."
                     : next.session().phase() == SessionSnapshot.Phase.REAUTH_REQUIRED ? "La cuenta necesita autorización. Puedes consultar la copia local."
                     : next.session().phase() == SessionSnapshot.Phase.OFFLINE ? "Sesión local disponible. Actualiza la bandeja para intentar conectar."
+                    : next.avatarPermissionRequired() ? "Para mostrar las fotos disponibles, vuelve a autorizar el acceso a tus contactos de Google."
                     : route == Route.RECOVERY ? "No se pudo iniciar Evermail. Revisa el almacenamiento local y vuelve a intentar."
                     : "";
             if (next.sessionError() == null) {
@@ -171,7 +175,10 @@ public final class MailWindow {
                     : next.session().phase() == SessionSnapshot.Phase.LOGGING_OUT ? "Cerrando sesión…" : "Iniciando tu experiencia de Correo");
             loading.label("loadingDetail").setText(route == Route.RECOVERY ? "Puedes reintentar sin borrar tus datos." : "Preparando el almacenamiento y la sesión…");
             ((ProgressBar)loading.node("loadingProgress")).setProgress(route == Route.RECOVERY ? 0 : -1);
-            if (privateView) { renderAccount(next.session().account()); renderInbox(next.inbox()); renderCompose(next.compose()); renderReader(next.reader()); }
+            if (privateView) {
+                if (!displayedAvatars.equals(next.avatars())) { displayedAvatars = next.avatars(); list.refresh(); }
+                renderAccount(next.session().account()); renderInbox(next.inbox()); renderCompose(next.compose()); renderReader(next.reader());
+            }
             if (!next.logoutConfirmation() && !next.compose().discardConfirmation()) dismissConfirmation();
             if (next.logoutConfirmation() || next.compose().discardConfirmation()) {
                 long expected = version;
@@ -240,7 +247,9 @@ public final class MailWindow {
         reader.label("readerSubject").setText(header == null ? "Cargando correo…" : "Asunto: " + header.getSubject());
         reader.label("senderName").setText(header == null ? "" : Objects.toString(header.getSenderName(),header.getSenderEmail()));
         reader.label("senderEmail").setText(header == null ? "" : header.getSenderEmail());
-        reader.label("senderAvatar").setText(header == null ? "" : initial(reader.label("senderName").getText()));
+        AvatarImage.show(reader.label("senderAvatar"), header == null ? null : reader.label("senderName").getText(),
+                header == null ? null : displayedAvatars.get(AvatarPhoto.address(header.getSenderEmail())));
+        if (header != null) requestAvatar(header.getSenderEmail());
         reader.label("sentAt").setText(header == null || header.getOccurredAt() == null ? "" : DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault()).format(header.getOccurredAt()));
         reader.label("recipients").setText(data.content() == null ? "" : "Para: " + data.content().getContent().getRecipients().stream().map(Recipient::getEmail).collect(java.util.stream.Collectors.joining(", ")));
         reader.button("formattedButton").setDisable(!data.hasHtml());
@@ -257,6 +266,8 @@ public final class MailWindow {
     private void wipePrivateViews() {
         boolean previous = rendering; rendering = true;
         try {
+            displayedAvatars = Map.of();
+            AvatarImage.show(reader.label("senderAvatar"), null, null);
             body.clear(); displayed = List.of(); list.getItems().clear(); list.getSelectionModel().clearSelection();
             for (View view : List.of(main,reader)) for (String id : List.of("accountName","accountEmail","accountAvatar")) view.label(id).setText("");
             for (String id : List.of("fromField","toField","ccField","bccField","subjectField","messageField","searchField")) main.field(id).clear();
@@ -264,6 +275,13 @@ public final class MailWindow {
             for (String id : List.of("readerSubject","senderName","senderEmail","senderAvatar","sentAt","recipients")) reader.label(id).setText("");
             sendStatus.setText(""); readerStatus.setText("");
         } finally { rendering = previous; }
+    }
+
+    private void requestAvatar(String email) {
+        long expected = version;
+        Platform.runLater(() -> {
+            if (!closing && version == expected) presenter.requestAvatar(email);
+        });
     }
 
     private void confirmIfRequested() {

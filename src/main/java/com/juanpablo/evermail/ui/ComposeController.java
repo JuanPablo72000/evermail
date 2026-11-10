@@ -7,6 +7,8 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
+import javafx.beans.binding.Bindings;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 
@@ -25,9 +27,26 @@ public final class ComposeController {
         bindVisibility(bccLabel, bccExpanded); bindVisibility(bccField, bccExpanded);
         ccExpanded.addListener((o, before, after) -> arrange());
         bccExpanded.addListener((o, before, after) -> arrange());
-        ccButton.setOnAction(e -> { ccExpanded.set(true); ccField.requestFocus(); });
-        bccButton.setOnAction(e -> { bccExpanded.set(true); bccField.requestFocus(); });
+        configureToggle(ccButton, ccField, ccExpanded, "CC");
+        configureToggle(bccButton, bccField, bccExpanded, "CCO");
         arrange();
+    }
+
+    private static void configureToggle(Button button, TextField field, BooleanProperty expanded, String label) {
+        button.setOnAction(e -> {
+            expanded.set(!expanded.get());
+            if (expanded.get()) field.requestFocus(); else button.requestFocus();
+        });
+        // Collapsing preserves the draft; make retained recipients visible on the button.
+        button.textProperty().bind(Bindings.createStringBinding(
+                () -> label + (!expanded.get() && !field.getText().isBlank() ? " •" : ""),
+                expanded, field.textProperty()));
+        var description = Bindings.createStringBinding(() -> (expanded.get() ? "Ocultar " : "Mostrar ")
+                + label + (!expanded.get() && !field.getText().isBlank() ? " (destinatarios conservados)" : ""),
+                expanded, field.textProperty());
+        button.accessibleTextProperty().bind(description);
+        Tooltip tooltip = new Tooltip(); tooltip.textProperty().bind(description); button.setTooltip(tooltip);
+        button.disableProperty().bind(field.editableProperty().not());
     }
 
     private static void bindVisibility(Node node, BooleanProperty expanded) {

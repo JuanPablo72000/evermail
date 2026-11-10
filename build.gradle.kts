@@ -80,7 +80,7 @@ tasks.register<JavaExec>("verifyMailRuntime") {
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     doFirst {
         jvmArgs("--module-path", sourceSets.main.get().runtimeClasspath.asPath,
-                "--patch-module", "com.juanpablo.evermail=${sourceSets.test.get().output.classesDirs.asPath}")
+                "--patch-module", "com.juanpablo.evermail=${files(sourceSets.test.get().output.classesDirs, sourceSets.main.get().output.resourcesDir).asPath}")
     }
 }
 
@@ -104,6 +104,16 @@ tasks.register<JavaExec>("measureMailReads") {
     mainClass.set("com.juanpablo.evermail.diagnostics.ReadTimings")
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     doFirst { jvmArgs("--module-path", sourceSets.main.get().runtimeClasspath.asPath) }
+}
+
+tasks.register<JavaExec>("diagnoseAvatars") {
+    group = "verification"
+    description = "Checks People API and one thumbnail without changing local data or logging identities."
+    dependsOn(tasks.classes)
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("com.juanpablo.evermail.diagnostics.AvatarDiagnostics")
+    modularity.inferModulePath.set(false)
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
 }
 
 jlink {

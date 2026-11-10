@@ -21,7 +21,17 @@ public final class WindowAppearance {
                 "/com/juanpablo/evermail/images/Icono_Evermail.png")).toExternalForm();
         stage.getIcons().setAll(new Image(logo, 32, 32, true, true),
                 new Image(logo, 256, 256, true, true));
-        stage.addEventHandler(WindowEvent.WINDOW_SHOWN, event -> applyCaption(stage));
+        stage.addEventHandler(WindowEvent.WINDOW_SHOWN, event -> {
+            applyCaption(stage);
+            refreshCaption(stage);
+        });
+        stage.focusedProperty().addListener((o, before, after) -> refreshCaption(stage));
+        stage.maximizedProperty().addListener((o, before, after) -> refreshCaption(stage));
+    }
+
+    private static void refreshCaption(Stage stage) {
+        // Glass may update the non-client frame after the JavaFX event is delivered.
+        javafx.application.Platform.runLater(() -> { if (stage.isShowing()) applyCaption(stage); });
     }
 
     private static void applyCaption(Stage stage) {
@@ -33,6 +43,8 @@ public final class WindowAppearance {
             Dwm dwm = Native.load("dwmapi", Dwm.class);
             // COLORREF is 0x00BBGGRR; #251a30 matches Common.css.
             dwm.DwmSetWindowAttribute(hwnd, 20, new IntByReference(1), Integer.BYTES);
+            dwm.DwmSetWindowAttribute(hwnd, 33, new IntByReference(2), Integer.BYTES);
+            dwm.DwmSetWindowAttribute(hwnd, 34, new IntByReference(0x00e93420), Integer.BYTES);
             dwm.DwmSetWindowAttribute(hwnd, 35, new IntByReference(0x00301a25), Integer.BYTES);
             dwm.DwmSetWindowAttribute(hwnd, 36, new IntByReference(0x00ffffff), Integer.BYTES);
         } catch (LinkageError | RuntimeException unavailable) {

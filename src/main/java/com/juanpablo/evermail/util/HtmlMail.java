@@ -44,7 +44,7 @@ public final class HtmlMail {
             source.body().empty().appendChild(wrapper);
         }
         Safelist allowed = Safelist.relaxed().addTags("div", "span", "font", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "center", "colgroup", "col")
-                .addAttributes(":all", "style", "align", "bgcolor", "class", "id", "dir", "background")
+                .addAttributes(":all", "style", "align", "bgcolor", "class", "id", "dir", "background", "hidden")
                 .addAttributes("table", "width", "height", "border", "cellpadding", "cellspacing")
                 .addAttributes("td", "width", "height", "valign").addAttributes("th", "width", "height", "valign")
                 .addAttributes("tr", "valign").addAttributes("col", "width", "span")

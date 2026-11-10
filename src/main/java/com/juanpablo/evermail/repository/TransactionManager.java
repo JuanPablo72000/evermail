@@ -103,6 +103,17 @@ public class TransactionManager implements AutoCloseable {
             }
         }
 
+        public <T> T saveAvatar(long actualBytes, DbWork<T> work) throws EvermailException {
+            synchronized (TransactionManager.this) {
+                if (closed) throw new IllegalStateException("Reservation already released");
+                close();
+                // Recheck disk changes without ever reclaiming a mail body for an optional photo.
+                try (var replacement = reserveAvatar(mailId, actualBytes)) {
+                    return executeTransaction(work);
+                }
+            }
+        }
+
         @Override public void close() {
             synchronized (TransactionManager.this) {
                 if (!closed) {
@@ -112,6 +123,32 @@ public class TransactionManager implements AutoCloseable {
                 }
             }
         }
+    }
+
+    /** Optional photos may displace photos, but never evict a readable message to make room. */
+    public synchronized CacheReservation reserveAvatar(UUID senderId, long bytes) throws EvermailException {
+        try {
+            Connection connection = provider.connection();
+            long maximum = provider.storage().targetBytes(reservedBytes);
+            while (databaseBytes(connection) + bytes > maximum) {
+                if (!discardAvatar(connection)) throw StorageBudget.exhausted();
+                maximum = provider.storage().targetBytes(reservedBytes);
+            }
+            provider.storage().enforceMaximum(connection, maximum);
+            reservedBytes += bytes;
+            cache.reserve(senderId);
+            return new CacheReservation(senderId, bytes);
+        } catch (Exception error) { throw databaseError(error); }
+    }
+
+    private boolean discardAvatar(Connection connection) throws Exception {
+        if (Sql.one(connection, "SELECT name FROM sqlite_master WHERE type='table' AND name='avatar_cache'",
+                row -> row.getString(1)) == null) return false;
+        Long rowId = Sql.one(connection, "SELECT rowid FROM avatar_cache ORDER BY updated_at LIMIT 1", row -> row.getLong(1));
+        if (rowId == null) return false;
+        provider.storage().enforceCleanup(connection);
+        executeTransaction(c -> Sql.update(c, "DELETE FROM avatar_cache WHERE rowid=?", rowId));
+        return true;
     }
 
     private void makeRoom(UUID mailId, long bytes) throws EvermailException {
@@ -124,6 +161,10 @@ public class TransactionManager implements AutoCloseable {
             Connection connection = provider.connection();
             long maximum = provider.storage().targetBytes(reservedBytes);
             while (databaseBytes(connection) + bytes > maximum) {
+                if (discardAvatar(connection)) {
+                    maximum = provider.storage().targetBytes(reservedBytes);
+                    continue;
+                }
                 UUID victim = cache.victim(connection, mailId);
                 if (victim == null) {
                     if (required || databaseBytes(connection) > maximum) throw StorageBudget.exhausted();

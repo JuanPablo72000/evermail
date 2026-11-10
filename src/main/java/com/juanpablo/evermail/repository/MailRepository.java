@@ -204,6 +204,7 @@ public class MailRepository {
         transactions.write(c -> {
             Sql.update(c, "DELETE FROM mail WHERE direction='INBOX'");
             Sql.update(c, "DELETE FROM inbox_state");
+            Sql.update(c, "DELETE FROM avatar_cache");
             return null;
         });
         // auto_vacuum=FULL returns freed pages on commit without creating a temporary database copy.

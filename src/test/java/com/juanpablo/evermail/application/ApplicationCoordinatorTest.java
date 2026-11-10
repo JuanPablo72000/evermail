@@ -71,6 +71,37 @@ class ApplicationCoordinatorTest {
         assertEquals(1, opens.get());
     }
 
+    @Test void avatarWorkDoesNotBlockMailAndLogoutWaitsForItsWriter() throws Exception {
+        CountDownLatch entered = gate(), release = gate();
+        AtomicBoolean active = new AtomicBoolean(), loggedOut = new AtomicBoolean();
+        coordinator.closeAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
+        coordinator = new ApplicationCoordinator(() -> new BackendAccess() {
+            public StartupResult start(Deadline d) { return new StartupResult(account, StartupStatus.READY); }
+            public Account login(OAuthProvider provider, CancellationToken cancellation) { return account; }
+            public void logout(UUID id, Deadline d) { assertFalse(active.get()); loggedOut.set(true); }
+            public InboxService inbox() { return null; }
+            public MailSendService sender() { return null; }
+            public void close() { assertFalse(active.get()); }
+            public AvatarPhoto avatar(Account owner, String email, boolean online, Deadline d) throws Exception {
+                assertEquals(account, owner); assertTrue(online);
+                active.set(true); entered.countDown();
+                try { awaitIgnoringInterrupts(release); }
+                finally { active.set(false); }
+                return AvatarPhoto.empty(AvatarPhoto.Status.ABSENT);
+            }
+        }, 4);
+        assertTrue(result(coordinator.start()).succeeded());
+        var avatar = coordinator.avatar("sender@example.com");
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        assertEquals("mail", result(coordinator.submit(Duration.ofSeconds(1), (b, a, d) -> "mail")).value());
+        var logout = coordinator.logout();
+        assertFalse(loggedOut.get());
+        release.countDown();
+        assertEquals(ErrorCode.CANCELLED, result(avatar).error().code());
+        assertTrue(result(logout).succeeded());
+        assertTrue(loggedOut.get());
+    }
+
     @Test void rejectsConcurrentStartupAndUnauthenticatedWork() throws Exception {
         CountDownLatch entered = gate(), release = gate();
         backend.startHook = () -> { entered.countDown(); awaitIgnoringInterrupts(release); };

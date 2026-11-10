@@ -1,4 +1,4 @@
-.reader-view { -fx-background-color: #251a30; -fx-border-color: #2034e9; -fx-border-radius: 12; }
+.reader-view { -fx-background-color: #251a30; }
 .reader-content { -fx-background-color: #1e1527; -fx-padding: 1.95em 2.35em 1.7em 1.35em; -fx-spacing: 0.9em; }
 .reader-toolbar { -fx-hgap: 1.1em; -fx-vgap: 0.5em; -fx-alignment: center-left; -fx-padding: 0 0.6em 0.8em; }
 .reader-toolbar .button { -fx-font-size: 1.2em; -fx-min-height: 2.08333em; }

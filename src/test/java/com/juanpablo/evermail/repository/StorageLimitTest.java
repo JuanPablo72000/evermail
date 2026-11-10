@@ -127,6 +127,35 @@ class StorageLimitTest extends BackendFixture {
         assertThrows(DatabaseException.class, () -> new SqliteConnectionProvider(storage));
     }
 
+    @Test void optionalPhotoCannotEvictMailAndItsReservationIsReleased() throws Exception {
+        MailHeader header = headers(1).getFirst(); save(header);
+        long tooLarge = storage.databaseLimit();
+        assertEquals(ErrorCode.STORAGE_LIMIT_REACHED, assertThrows(EvermailException.class,
+                () -> transactions.reserveAvatar(UUID.randomUUID(), tooLarge)).getErrorCode());
+        assertNotNull(mails.readContent(account.getId(), header.getId()));
+        try (var reservation = transactions.reserveAvatar(UUID.randomUUID(), 96 * 1024)) { }
+        save(header);
+        assertTrue(physicalSize() < LIMIT);
+    }
+
+    @Test void mailWritesReclaimPhotosBeforeMessageBodies() throws Exception {
+        MailHeader header = headers(1).getFirst(); save(header);
+        var photos = new AvatarRepository(transactions, accounts, security, keys);
+        var photo = new AvatarPhoto(new byte[65_536], AvatarPhoto.Status.AVAILABLE);
+        for (int i = 0; i < 3; i++) {
+            String email = "sender" + i + "@example.com";
+            try (var reservation = photos.reserve(email)) {
+                photos.save(account.getId(), email, photo, java.time.Instant.now(), reservation);
+            }
+        }
+        long nearLimit = storage.databaseLimit() - Files.size(database) + 8192;
+        try (var reservation = transactions.reserveCache(header.getId(), nearLimit)) {
+            assertTrue(count("avatar_cache") < 3);
+            assertNotNull(mails.readContent(account.getId(), header.getId()));
+        }
+        assertTrue(physicalSize() < LIMIT);
+    }
+
     @Test void largerApplicationTriggersCleanupBeforeNewWrites() throws Exception {
         List<MailHeader> headers = headers(6);
         for (MailHeader header : headers) save(header);

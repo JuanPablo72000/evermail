@@ -7,7 +7,13 @@ import java.util.*;
 
 /** Immutable snapshots shared with the view; no JavaFX properties or controls. */
 public record MailViewState(Route route, SessionSnapshot session, boolean sessionBusy, OperationError sessionError,
-                            Inbox inbox, Reader reader, Compose compose, boolean logoutConfirmation) {
+                            Inbox inbox, Reader reader, Compose compose, boolean logoutConfirmation,
+                            Map<String, AvatarPhoto> avatars, boolean avatarPermissionRequired) {
+    public MailViewState { avatars = Map.copyOf(avatars); }
+    public MailViewState(Route route, SessionSnapshot session, boolean sessionBusy, OperationError sessionError,
+                         Inbox inbox, Reader reader, Compose compose, boolean logoutConfirmation) {
+        this(route, session, sessionBusy, sessionError, inbox, reader, compose, logoutConfirmation, Map.of(), false);
+    }
     public boolean canReadPrevious() { return adjacentMail(-1).isPresent(); }
     public boolean canReadNext() { return adjacentMail(1).isPresent(); }
 

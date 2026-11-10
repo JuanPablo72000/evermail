@@ -11,6 +11,11 @@ Acuerdos registrados con el usuario el 27 de septiembre de 2026. Este documento 
 
 ## Futuras versiones
 
+Actualización del 6 de noviembre de 2026: las fotos de remitentes disponibles en
+los contactos de Google se incorporan al alcance autorizado. Véase la
+[guía de fotos de remitentes](../desarrollo/fotos-remitentes.md). Las fotos de la
+cuenta propia y la integración de fotos con Microsoft siguen pendientes.
+
 - Incorporar el envío de adjuntos junto con mensajes de texto plano. Incluir selector de archivos, drag and drop y lista con nombre, tamaño y opción de quitar archivos. La integración debe contemplar validación, conservación de archivos para la cola de envío y reintentos, y limpieza posterior.
 - Hacer funcional la pestaña **Enviados**, para consultar los correos enviados.
 

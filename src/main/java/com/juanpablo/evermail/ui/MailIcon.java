@@ -41,6 +41,8 @@ public final class MailIcon extends StackPane {
             default -> "8-282-imgBandeja";
         };
         image.setSource(file + ".png");
+        // Leave room for antialiasing around strokes that touch the original asset's edges.
+        image.setPadding(value.equals("logout") ? new javafx.geometry.Insets(1) : javafx.geometry.Insets.EMPTY);
         image.setRotate(value.equals("next") ? 180 : 0);
     }
 }

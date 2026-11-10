@@ -15,7 +15,9 @@ public enum OAuthProvider {
     GOOGLE(
             "https://accounts.google.com/o/oauth2/v2/auth",
             "https://oauth2.googleapis.com/token",
-            List.of("https://mail.google.com/", "openid", "email", "profile"),
+            List.of("https://mail.google.com/", "openid", "email", "profile",
+                    "https://www.googleapis.com/auth/contacts.readonly",
+                    "https://www.googleapis.com/auth/contacts.other.readonly"),
             true,
             "imap.gmail.com", 993,
             "smtp.gmail.com", 587

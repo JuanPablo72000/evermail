@@ -405,7 +405,42 @@ class MailPresenterTest {
         void fail(ErrorCode code) { future.complete(OperationResult.failure(new OperationError(code, "Test error"))); }
     }
 
+    @Test void avatarRequestsDeduplicateAndLatePhotosCannotReturnAfterReauthorization() {
+        backend.enableAvatars = true;
+        inbox(mail(1));
+        String sender = mail(1).getSenderEmail();
+        presenter.requestAvatar(sender); presenter.requestAvatar(sender.toUpperCase(Locale.ROOT));
+        assertEquals(1, backend.avatars.size());
+        var old = backend.avatars.getFirst();
+        presenter.login(OAuthProvider.GOOGLE);
+        old.complete(new AvatarPhoto(new byte[]{1}, AvatarPhoto.Status.AVAILABLE)); flush();
+        assertTrue(presenter.state().avatars().isEmpty());
+        assertTrue(old.cancelled);
+    }
+
+    @Test void missingAvatarPermissionLeavesInboxUsableAndOffersConsent() {
+        backend.enableAvatars = true;
+        inbox(mail(1));
+        backend.session = new SessionSnapshot(SessionSnapshot.Phase.READY, account, backend.session.version());
+        presenter.requestAvatar(mail(1).getSenderEmail());
+        backend.avatars.getFirst().complete(AvatarPhoto.empty(AvatarPhoto.Status.PERMISSION_REQUIRED)); flush();
+        assertTrue(presenter.state().avatarPermissionRequired());
+        assertNull(presenter.state().sessionError());
+        assertEquals(SessionSnapshot.Phase.READY, presenter.state().session().phase());
+        presenter.openMail(mail(1).getId());
+        assertEquals(Route.READER, presenter.state().route());
+        presenter.requestLogout(); presenter.confirmLogout();
+        assertTrue(presenter.state().avatars().isEmpty());
+        assertFalse(presenter.state().avatarPermissionRequired());
+    }
+
     private final class FakeBackend implements PresentationBackend {
+        boolean enableAvatars;
+        List<Pending<AvatarPhoto>> avatars = new ArrayList<>();
+        public Optional<OperationHandle<AvatarPhoto>> avatar(String email) {
+            if (!enableAvatars) return Optional.empty();
+            var pending = new Pending<AvatarPhoto>(session.version()); avatars.add(pending); return Optional.of(pending);
+        }
         SessionSnapshot session = new SessionSnapshot(SessionSnapshot.Phase.NEW, null, 0);
         Pending<StartupResult> startup;
         Pending<Account> login;

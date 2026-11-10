@@ -26,7 +26,8 @@ final class MailCss {
             "border-top", "border-right", "border-bottom", "border-left", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
             "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
             "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
-            "table-layout", "display", "float", "clear", "list-style-type", "list-style-position", "direction");
+            "table-layout", "display", "float", "clear", "list-style-type", "list-style-position", "direction",
+            "overflow", "overflow-x", "overflow-y", "visibility", "opacity");
     private static final Pattern COMPOUND = Pattern.compile("(?:[a-zA-Z][a-zA-Z0-9-]*|\\*)?(?:[.#][a-zA-Z_][a-zA-Z0-9_-]*)*(?::(?:first-child|last-child|only-child))?");
     private static final String WIDTH = "\\((?:min-|max-)?width:[0-9]{1,4}(?:\\.[0-9]{1,2})?(?:px|em)\\)";
     private static final Pattern MEDIA = Pattern.compile("(?:(?:only )?(?:screen|all)(?: and " + WIDTH + ")*|" + WIDTH + "(?: and " + WIDTH + ")*)");
@@ -122,7 +123,12 @@ final class MailCss {
             if (!PROPERTIES.contains(name)) continue;
             String value = expression(declaration.getExpression(), name, 0);
             if (value == null || value.isBlank()) continue;
-            // Layout stays inside normal flow; no fixed positioning, overlays or clipping.
+            // Static clipping keeps email preheaders hidden without allowing positioning or overlays.
+            if (Set.of("overflow", "overflow-x", "overflow-y").contains(name)
+                    && !Set.of("hidden", "visible", "clip").contains(value)) continue;
+            if (name.equals("visibility") && !Set.of("visible", "hidden", "collapse").contains(value)) continue;
+            if (name.equals("opacity") && (!value.matches("(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?|\\.[0-9]+)")
+                    || Double.parseDouble(value) > 1)) continue;
             if (name.equals("display") && !Set.of("none", "block", "inline", "inline-block", "table", "inline-table", "table-row", "table-cell", "table-row-group", "table-header-group", "table-footer-group", "list-item").contains(value)) continue;
             output.append(name).append(':').append(value);
             if (declaration.isImportant()) output.append("!important");

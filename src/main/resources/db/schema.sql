@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS account (
     )
 );
 
+CREATE TABLE IF NOT EXISTS avatar_cache (
+    id_account TEXT NOT NULL REFERENCES account(id_account) ON DELETE CASCADE,
+    sender_id TEXT NOT NULL,
+    photo_cipher BLOB NOT NULL,
+    expires_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (id_account, sender_id)
+);
+
 CREATE TABLE IF NOT EXISTS inbox_state (
     id_account TEXT PRIMARY KEY REFERENCES account(id_account) ON DELETE CASCADE,
     uid_validity INTEGER NOT NULL CHECK (uid_validity > 0),

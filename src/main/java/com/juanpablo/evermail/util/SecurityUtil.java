@@ -73,4 +73,31 @@ public class SecurityUtil {
         return (context.getAccountId() + "/" + context.getRecordId() + "/" + context.getFieldName())
                 .getBytes(StandardCharsets.UTF_8);
     }
+
+    /** Binary envelope for cached thumbnails; avoids storing Base64 images. */
+    public byte[] encryptBinary(byte[] plain, SecretKey key, CryptoContext context) throws CryptoException {
+        try {
+            byte[] nonce = new byte[12];
+            RANDOM.nextBytes(nonce);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(128, nonce));
+            cipher.updateAAD(aad(context));
+            byte[] encrypted = cipher.doFinal(plain);
+            return ByteBuffer.allocate(1 + nonce.length + encrypted.length).put((byte) 1).put(nonce).put(encrypted).array();
+        } catch (Exception e) {
+            throw new CryptoException(ErrorCode.CRYPTO_OPERATION_FAILED, "Unable to encrypt thumbnail", e);
+        }
+    }
+
+    public byte[] decryptBinary(byte[] envelope, SecretKey key, CryptoContext context) throws CryptoException {
+        try {
+            if (envelope.length < 29 || envelope[0] != 1) throw new IllegalArgumentException("Invalid envelope");
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, envelope, 1, 12));
+            cipher.updateAAD(aad(context));
+            return cipher.doFinal(envelope, 13, envelope.length - 13);
+        } catch (Exception e) {
+            throw new CryptoException(ErrorCode.CRYPTO_OPERATION_FAILED, "Unable to authenticate thumbnail", e);
+        }
+    }
 }

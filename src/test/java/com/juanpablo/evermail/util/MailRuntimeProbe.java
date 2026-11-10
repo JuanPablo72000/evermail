@@ -13,7 +13,7 @@ public final class MailRuntimeProbe {
             throw new AssertionError("HTML/CSS runtime failed");
         System.out.println("Modular HTML/CSS runtime OK");
         if (com.sun.jna.Platform.isWindows()) {
-            com.sun.jna.Native.load("dwmapi", com.juanpablo.evermail.ui.WindowAppearance.Dwm.class);
+            com.juanpablo.evermail.ui.WindowAppearanceProbe.verify();
             System.out.println("Modular native window appearance runtime OK");
         }
     }

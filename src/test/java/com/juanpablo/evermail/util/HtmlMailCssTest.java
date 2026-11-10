@@ -16,6 +16,31 @@ class HtmlMailCssTest {
         return InlineImages.dataUri(out.toByteArray());
     }
 
+    @Test void preservesStaticPreheaderHidingAcrossCacheAndDisplaySanitization() throws Exception {
+        String raw = """
+                <style>.preview{max-height:0;max-width:0;overflow:hidden;opacity:0;visibility:hidden}</style>
+                <div class="preview">Mira quién se ha puesto en contacto contigo</div>
+                <div id="inline" style="width:1px;height:1px;overflow-x:hidden;overflow-y:hidden;opacity:0.0;position:absolute;left:-9999px">Preview</div>
+                <div id="hidden" hidden>Preview filler</div><p>Visible message</p>
+                <p id="invalid" style="overflow:url(https://evil.invalid);visibility:inherit;opacity:2">Readable</p>
+                """;
+        String cached = HtmlMail.sanitize(raw, cid -> null, null, true, budget()).html();
+        var safe = HtmlMail.sanitize(cached, cid -> null, budget());
+        var doc = Jsoup.parse(safe.html());
+        String css = doc.selectFirst("style").data();
+        assertTrue(css.contains("overflow:hidden"), css);
+        assertTrue(css.contains("visibility:hidden"), css);
+        assertTrue(css.contains("opacity:0"), css);
+        assertTrue(doc.selectFirst("#inline").attr("style").contains("overflow-x:hidden"));
+        assertTrue(doc.selectFirst("#inline").attr("style").contains("overflow-y:hidden"));
+        assertTrue(doc.selectFirst("#hidden").hasAttr("hidden"));
+        assertEquals("", doc.selectFirst("#invalid").attr("style"));
+        assertFalse(safe.html().contains("position:"));
+        assertFalse(safe.html().contains("left:"));
+        assertFalse(safe.html().contains("evil.invalid"));
+        assertTrue(doc.text().contains("Visible message"));
+    }
+
     @Test void retainsStylesCascadeMediaQueriesAndTableAttributesAcrossRepeatedCleaning() throws Exception {
         String html = """
                 <html><head><style>
